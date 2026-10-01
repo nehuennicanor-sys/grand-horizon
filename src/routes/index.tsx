@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CarSvg } from "@/components/CarSvg";
+import { useServerFn } from "@tanstack/react-start";
+import { aiDesignCar } from "@/lib/ai-build.functions";
 import {
   defaultCar, gearRatios, LAYOUTS, RIVALS, simulate, specs,
   type CarConfig, type Category, type Result,
@@ -102,6 +104,9 @@ function Garage() {
 
           {step < 5 ? (
             <div className="rounded-xl border border-border bg-card p-6">
+              {step === 0 && (
+                <AiEngineer onBuild={(c) => { setCar(c); setInstalled([true, true, true, true, true]); }} />
+              )}
               {step === 0 && (
                 <Panel title="Elegí la clase" hint="Define qué piezas vas a poder usar.">
                   <div className="grid gap-3 sm:grid-cols-3">
@@ -393,5 +398,56 @@ function Row({ k, v }: { k: string; v: string }) {
       <span className="text-muted-foreground">{k}</span>
       <span className="text-right font-semibold capitalize">{v}</span>
     </li>
+  );
+}
+
+const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, Number.isFinite(v) ? v : a));
+const hex = (v: string, f: string) => (/^#[0-9a-f]{6}$/i.test(v) ? v : f);
+
+function AiEngineer({ onBuild }: { onBuild: (c: CarConfig) => void }) {
+  const run = useServerFn(aiDesignCar);
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const go = async () => {
+    setLoading(true); setError(null); setNote(null);
+    try {
+      const r = await run({ data: { description: text } });
+      if (!r.ok) { setError(r.error); return; }
+      const b = r.build;
+      const L = LIMITS[b.category];
+      onBuild({
+        name: b.name.slice(0, 24), category: b.category,
+        layout: (L.layouts.includes(b.layout) ? b.layout : L.layouts[0]) as CarConfig["layout"],
+        displacement: Math.round(clamp(b.displacement, L.disp[0], L.disp[1]) * 10) / 10,
+        aspiration: b.aspiration, maxRpm: Math.round(clamp(b.maxRpm, L.rpm[0], L.rpm[1]) / 100) * 100,
+        boost: clamp(b.boost, 0, 1), gearbox: b.gearbox, gears: Math.round(clamp(b.gears, 4, 8)),
+        finalDrive: clamp(b.finalDrive, 2.5, 4.6), drive: b.drive, material: b.material, tires: b.tires,
+        downforce: clamp(b.downforce, 0, 1), body: b.body,
+        color: hex(b.color, "#ff5a1f"), accent: hex(b.accent, "#111318"), wheelColor: hex(b.wheelColor, "#2a2d33"),
+        spoiler: b.spoiler, stripes: b.stripes, wheelSize: Math.round(clamp(b.wheelSize, 15, 22)),
+      });
+      setNote(b.explanation);
+    } catch {
+      setError("No se pudo contactar a la IA. Intentá de nuevo.");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="mb-6 rounded-lg border border-primary/40 bg-primary/5 p-4">
+      <p className="font-display text-sm font-bold tracking-wider text-primary">INGENIERO IA</p>
+      <p className="mb-3 text-sm text-muted-foreground">Describí el auto que querés y la IA arma un motor, transmisión y piezas compatibles. Después podés ajustar todo.</p>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={800} rows={3}
+        placeholder="Ej: un deportivo japonés liviano, tracción trasera, ideal para curvas, color azul"
+        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
+      <button onClick={go} disabled={loading || text.trim().length < 5}
+        className="mt-2 rounded-md bg-primary px-4 py-2 font-display text-xs font-bold tracking-widest text-primary-foreground transition hover:brightness-110 disabled:opacity-50">
+        {loading ? "DISEÑANDO…" : "GENERAR CON IA"}
+      </button>
+      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+      {note && <p className="mt-3 rounded-md bg-muted p-3 text-sm">✓ {note} <span className="text-muted-foreground">Revisá cada paso o andá directo a la prueba.</span></p>}
+    </div>
   );
 }
