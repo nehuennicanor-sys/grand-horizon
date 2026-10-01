@@ -234,7 +234,7 @@ function TestTrack({ car }: { car: CarConfig }) {
   const [t, setT] = useState(0);
   const [running, setRunning] = useState(false);
   const raf = useRef(0);
-  const rival = RIVALS[rivalIdx];
+  const rival = RIVALS[rivalIdx]!;
 
   const start = () => {
     const me = simulate(car), rv = simulate(rival.car);
