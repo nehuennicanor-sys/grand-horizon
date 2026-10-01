@@ -36,7 +36,7 @@ function blankCar(): CarConfig {
     name: "Mi auto", layout: "I4", displacement: 2, aspiration: "atmosferico", maxRpm: 6500, boost: 0.5,
     gearbox: "manual", gears: 6, finalDrive: 3.6, drive: "RWD", material: "acero", tires: "deportivo",
     downforce: 0, body: "coupe", color: "#8a8f98", accent: "#1a1c21", wheelColor: "#2a2d33",
-    spoiler: false, stripes: false, wheelSize: 17, wheelStyle: "rayos", rideHeight: 0.5, roof: 0.5,
+    spoiler: false, stripes: false, wheelSize: 17, wheelStyle: "rayos", rideHeight: 0.5, roof: 0.5, diff: "abierto", suspension: "confort", brakes: "estandar",
   };
 }
 
@@ -148,13 +148,25 @@ function Garage() {
                     {([["FWD", "Delantera"], ["RWD", "Trasera"], ["AWD", "Integral 4x4"]] as const).map(([k, l]) =>
                       <Pill key={k} active={car.drive === k} onClick={() => set("drive", k)}>{l}</Pill>)}
                   </Group>
+                  <Group label="Diferencial">
+                    {([["abierto", "Abierto"], ["autoblocante", "Autoblocante (LSD)"], ["electronico", "Electrónico"]] as const).map(([k, l]) =>
+                      <Pill key={k} active={car.diff === k} onClick={() => set("diff", k)}>{l}</Pill>)}
+                  </Group>
                   <div className="flex flex-wrap gap-2 font-mono text-xs text-muted-foreground">
                     {gearRatios(car).map((r, i) => <span key={i} className="rounded bg-muted px-2 py-1">{i + 1}ª {r.toFixed(2)}</span>)}
                   </div>
                 </Panel>
               )}
               {step === 3 && (
-                <Panel title="Chasis y aerodinámica" hint="Material, neumáticos y carga aerodinámica.">
+                <Panel title="Chasis, ejes y aerodinámica" hint="Material, suspensión, frenos, neumáticos y carga aerodinámica.">
+                  <Group label="Suspensión">
+                    {([["confort", "Confort"], ["deportiva", "Deportiva"], ["competicion", "Competición"]] as const).map(([k, l]) =>
+                      <Pill key={k} active={car.suspension === k} onClick={() => set("suspension", k)}>{l}</Pill>)}
+                  </Group>
+                  <Group label="Frenos">
+                    {([["estandar", "Estándar"], ["deportivos", "Deportivos"], ["carbono", "Carbono-cerámicos"]] as const).map(([k, l]) =>
+                      <Pill key={k} active={car.brakes === k} onClick={() => set("brakes", k)}>{l}</Pill>)}
+                  </Group>
                   <Group label="Material">
                     {([["acero", "Acero"], ["aluminio", "Aluminio"], ["carbono", "Fibra de carbono"]] as const).map(([k, l]) =>
                       <Pill key={k} active={car.material === k} onClick={() => set("material", k)}>{l}</Pill>)}
@@ -172,6 +184,18 @@ function Garage() {
                   <Group label="Carrocería">
                     {([["sedan", "Sedán"], ["coupe", "Coupé"], ["hiper", "Hiperauto"]] as const).map(([k, l]) =>
                       <Pill key={k} active={car.body === k} onClick={() => set("body", k)}>{l}</Pill>)}
+                  </Group>
+                  <Range label="Altura de manejo" value={car.rideHeight} min={0} max={1} step={0.05} unit="" fmt={(v) => `${Math.round(60 + v * 120)} mm`} onChange={(v) => set("rideHeight", v)} />
+                  <Range label="Altura del techo" value={car.roof} min={0} max={1} step={0.05} unit="" fmt={(v) => (v < 0.33 ? "Bajo" : v < 0.66 ? "Medio" : "Alto")} onChange={(v) => set("roof", v)} />
+                  <Group label="Colores rápidos">
+                    {["#e8eef5", "#111318", "#d8312b", "#ff5a1f", "#f5c518", "#2f6fd6", "#1f8a5b", "#8a8f98"].map((c) => (
+                      <button key={c} aria-label={`Color ${c}`} onClick={() => set("color", c)}
+                        className={`h-8 w-8 rounded-full border-2 ${car.color === c ? "border-primary" : "border-border"}`} style={{ background: c }} />
+                    ))}
+                  </Group>
+                  <Group label="Estilo de llantas">
+                    {([["rayos", "5 rayos"], ["multirayo", "Multirayo"], ["disco", "Disco aero"], ["malla", "Malla"]] as const).map(([k, l]) =>
+                      <Pill key={k} active={car.wheelStyle === k} onClick={() => set("wheelStyle", k)}>{l}</Pill>)}
                   </Group>
                   <div className="grid grid-cols-3 gap-3">
                     <Color label="Pintura" value={car.color} onChange={(v) => set("color", v)} />
@@ -207,7 +231,9 @@ function Garage() {
               <Row k="Motor" v={installed[1] ? `${car.layout} ${car.displacement.toFixed(1)}L ${car.aspiration}` : "Sin instalar"} />
               <Row k="Caja" v={installed[2] ? `${car.gears} vel. ${car.gearbox}` : "Sin instalar"} />
               <Row k="Tracción" v={installed[2] ? car.drive : "Sin instalar"} />
+              <Row k="Diferencial" v={installed[2] ? car.diff : "Sin instalar"} />
               <Row k="Chasis" v={installed[3] ? `${car.material}, ${car.tires}` : "Sin instalar"} />
+              <Row k="Suspensión / frenos" v={installed[3] ? `${car.suspension}, ${car.brakes}` : "Sin instalar"} />
               <Row k="Cx" v={s.cd.toFixed(2)} />
             </ul>
           </div>
@@ -427,7 +453,7 @@ function AiEngineer({ onBuild }: { onBuild: (c: CarConfig) => void }) {
         finalDrive: clamp(b.finalDrive, 2.5, 4.6), drive: b.drive, material: b.material, tires: b.tires,
         downforce: clamp(b.downforce, 0, 1), body: b.body,
         color: hex(b.color, "#ff5a1f"), accent: hex(b.accent, "#111318"), wheelColor: hex(b.wheelColor, "#2a2d33"),
-        spoiler: b.spoiler, stripes: b.stripes, wheelSize: Math.round(clamp(b.wheelSize, 15, 22)), wheelStyle: "rayos", rideHeight: b.category === "normal" ? 0.6 : b.category === "deportivo" ? 0.35 : 0.1, roof: b.body === "hiper" ? 0.3 : 0.5,
+        spoiler: b.spoiler, stripes: b.stripes, wheelSize: Math.round(clamp(b.wheelSize, 15, 22)), wheelStyle: "rayos", diff: b.diff, suspension: b.suspension, brakes: b.brakes, rideHeight: b.category === "normal" ? 0.6 : b.category === "deportivo" ? 0.35 : 0.1, roof: b.body === "hiper" ? 0.3 : 0.5,
       });
       setNote(b.explanation);
     } catch {

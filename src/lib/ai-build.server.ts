@@ -26,6 +26,9 @@ export const buildSchema = z.object({
   spoiler: z.boolean(),
   stripes: z.boolean(),
   wheelSize: z.number(),
+  diff: z.enum(["abierto", "autoblocante", "electronico"]),
+  suspension: z.enum(["confort", "deportiva", "competicion"]),
+  brakes: z.enum(["estandar", "deportivos", "carbono"]),
   explanation: z.string(),
 });
 

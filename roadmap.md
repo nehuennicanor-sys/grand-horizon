@@ -6,3 +6,4 @@
 - [ ] Visual design controls: body shape, colors, wheel styles, live preview
 - [ ] Driving test: acceleration, top speed, handling (skidpad, braking, slalom, lap)
 - [ ] Save multiple builds + side-by-side comparison (specs & performance)
+- [ ] Mechanical editor: add differential, suspension, brakes (axles)
