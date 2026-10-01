@@ -95,9 +95,6 @@ export function defaultCar(cat: Category = "deportivo"): CarConfig {
     roof: cat === "normal" ? 0.6 : 0.4,
     ...PRESETS[cat],
   } as CarConfig;
-  return {
-    ...base,
-  };
 }
 
 export function specs(c: CarConfig) {
