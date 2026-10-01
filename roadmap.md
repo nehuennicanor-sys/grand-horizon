@@ -4,3 +4,4 @@
 - [x] Speed test (drag race + top speed)
 - [x] AI engineer: describe car → AI generates compatible setup
 - [ ] Visual design controls: body shape, colors, wheel styles, live preview
+- [ ] Driving test: acceleration, top speed, handling (skidpad, braking, slalom, lap)
