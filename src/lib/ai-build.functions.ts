@@ -5,7 +5,7 @@ import { generateBuild } from "./ai-build.server";
 export const aiDesignCar = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ description: z.string().trim().min(5).max(800) }).parse(d))
   .handler(async ({ data }) => {
-    const key = process.env.LOVABLE_API_KEY;
+    const key = process.env['LOVABLE_API_KEY'];
     if (!key) return { ok: false as const, error: "La IA no está configurada." };
     try {
       const build = await generateBuild(data.description, key);
