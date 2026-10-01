@@ -5,6 +5,7 @@ export type Gearbox = "manual" | "automatica" | "doble-embrague";
 export type Drive = "FWD" | "RWD" | "AWD";
 export type Material = "acero" | "aluminio" | "carbono";
 export type Tires = "eco" | "deportivo" | "semi-slick";
+export type WheelStyle = "rayos" | "multirayo" | "disco" | "malla";
 export type Body = "sedan" | "coupe" | "hiper";
 
 export interface CarConfig {
@@ -29,6 +30,9 @@ export interface CarConfig {
   spoiler: boolean;
   stripes: boolean;
   wheelSize: number; // inches
+  wheelStyle: WheelStyle;
+  rideHeight: number; // 0 (low) .. 1 (high)
+  roof: number; // 0 (low) .. 1 (tall)
 }
 
 export const LAYOUTS: Record<Layout, { cyl: number; weight: number; factor: number }> = {
@@ -74,6 +78,9 @@ export function defaultCar(cat: Category = "deportivo"): CarConfig {
     color: cat === "super" ? "#ff5a1f" : cat === "deportivo" ? "#e8eef5" : "#2f6fd6",
     accent: "#111318",
     wheelColor: "#2a2d33",
+    wheelStyle: "rayos",
+    rideHeight: cat === "normal" ? 0.6 : cat === "deportivo" ? 0.35 : 0.1,
+    roof: cat === "normal" ? 0.6 : 0.4,
     ...(PRESETS[cat] as Omit<CarConfig, "name" | "category" | "color" | "accent" | "wheelColor">),
   };
 }
@@ -89,8 +96,8 @@ export function specs(c: CarConfig) {
   const gbMass = c.gearbox === "manual" ? 45 : 70;
   const driveMass = c.drive === "AWD" ? 70 : 0;
   const mass = Math.round(BODY[c.body].mass * MAT[c.material] + engineMass + gbMass + driveMass + c.wheelSize * 4 + (c.spoiler ? 12 : 0));
-  const cd = BODY[c.body].cd + c.downforce * 0.08 + (c.spoiler ? 0.015 : 0);
-  return { hp: Math.round(hp), torqueNm: Math.round(torqueNm), peakRpm, mass, cd, area: BODY[c.body].area, cyl: L.cyl, hpPerTon: Math.round((hp / mass) * 1000) };
+  const cd = BODY[c.body].cd + c.downforce * 0.08 + (c.spoiler ? 0.015 : 0) + (c.roof - 0.5) * 0.04 + (c.rideHeight - 0.5) * 0.03;
+  return { hp: Math.round(hp), torqueNm: Math.round(torqueNm), peakRpm, mass, cd, area: BODY[c.body].area * (0.92 + c.roof * 0.16), cyl: L.cyl, hpPerTon: Math.round((hp / mass) * 1000) };
 }
 
 export function gearRatios(c: CarConfig) {
@@ -172,3 +179,24 @@ export const RIVALS: { name: string; car: CarConfig }[] = [
   { name: "Coupé deportivo", car: { ...defaultCar("deportivo"), color: "#d8312b" } },
   { name: "Hiperauto V12", car: { ...defaultCar("super"), color: "#f5c518" } },
 ];
+
+export interface Handling { lateralG: number; braking: number; slalom: number; lapTime: number; rating: number }
+
+export function handling(c: CarConfig, perf: Result): Handling {
+  const s = specs(c);
+  const mu = TIRE_MU[c.tires];
+  const cg = 1 - c.rideHeight * 0.12; // lower = better
+  const balance = c.drive === "AWD" ? 1.04 : c.drive === "RWD" ? 1.0 : 0.95;
+  const massPen = Math.pow(1300 / s.mass, 0.12);
+  const v = 160 / 3.6;
+  const downG = (0.5 * 1.2 * v * v * s.area * c.downforce * 1.8) / (s.mass * 9.81);
+  const lateralG = mu * cg * balance * massPen * (1 + downG * 0.6);
+  const braking = Math.pow(100 / 3.6, 2) / (2 * 9.81 * mu * cg * 1.05 * massPen); // m 100-0
+  const slalom = 52 + lateralG * 26 + (c.wheelSize - 15) * 0.4;
+  // simple 3 km circuit: 1.8 km straights (use avg straight speed) + 1.2 km corners
+  const vCorner = Math.sqrt(lateralG * 9.81 * 60) * 3.6;
+  const vStraight = Math.min(perf.topSpeed, (perf.qmSpeed ?? 150) * 1.05);
+  const lapTime = 1800 / (((vCorner + vStraight) / 2) / 3.6) + 1200 / (vCorner / 3.6);
+  const rating = Math.round(Math.min(100, Math.max(0, (lateralG - 0.6) * 110 + (60 - braking) * 0.8 + 30)));
+  return { lateralG, braking, slalom, lapTime, rating };
+}

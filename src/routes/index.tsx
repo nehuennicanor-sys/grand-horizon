@@ -36,7 +36,7 @@ function blankCar(): CarConfig {
     name: "Mi auto", layout: "I4", displacement: 2, aspiration: "atmosferico", maxRpm: 6500, boost: 0.5,
     gearbox: "manual", gears: 6, finalDrive: 3.6, drive: "RWD", material: "acero", tires: "deportivo",
     downforce: 0, body: "coupe", color: "#8a8f98", accent: "#1a1c21", wheelColor: "#2a2d33",
-    spoiler: false, stripes: false, wheelSize: 17,
+    spoiler: false, stripes: false, wheelSize: 17, wheelStyle: "rayos", rideHeight: 0.5, roof: 0.5,
   };
 }
 
@@ -427,7 +427,7 @@ function AiEngineer({ onBuild }: { onBuild: (c: CarConfig) => void }) {
         finalDrive: clamp(b.finalDrive, 2.5, 4.6), drive: b.drive, material: b.material, tires: b.tires,
         downforce: clamp(b.downforce, 0, 1), body: b.body,
         color: hex(b.color, "#ff5a1f"), accent: hex(b.accent, "#111318"), wheelColor: hex(b.wheelColor, "#2a2d33"),
-        spoiler: b.spoiler, stripes: b.stripes, wheelSize: Math.round(clamp(b.wheelSize, 15, 22)),
+        spoiler: b.spoiler, stripes: b.stripes, wheelSize: Math.round(clamp(b.wheelSize, 15, 22)), wheelStyle: "rayos", rideHeight: b.category === "normal" ? 0.6 : b.category === "deportivo" ? 0.35 : 0.1, roof: b.body === "hiper" ? 0.3 : 0.5,
       });
       setNote(b.explanation);
     } catch {

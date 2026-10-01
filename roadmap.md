@@ -5,3 +5,4 @@
 - [x] AI engineer: describe car → AI generates compatible setup
 - [ ] Visual design controls: body shape, colors, wheel styles, live preview
 - [ ] Driving test: acceleration, top speed, handling (skidpad, braking, slalom, lap)
+- [ ] Save multiple builds + side-by-side comparison (specs & performance)
