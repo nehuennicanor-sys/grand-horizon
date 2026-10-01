@@ -181,7 +181,7 @@ function Garage() {
               )}
               <button onClick={install}
                 className="mt-6 w-full rounded-md bg-primary py-3 font-display text-sm font-bold tracking-widest text-primary-foreground shadow-glow transition hover:brightness-110">
-                {installed[step] ? "ACTUALIZAR Y SEGUIR →" : `INSTALAR ${STEPS[step].toUpperCase()} →`}
+                {installed[step] ? "ACTUALIZAR Y SEGUIR →" : `INSTALAR ${STEPS[step]!.toUpperCase()} →`}
               </button>
             </div>
           ) : (
@@ -253,7 +253,7 @@ function TestTrack({ car }: { car: CarConfig }) {
   };
   useEffect(() => () => cancelAnimationFrame(raf.current), []);
 
-  const at = (r: Result) => r.samples.find((x) => x.t >= t) ?? r.samples[r.samples.length - 1];
+  const at = (r: Result) => r.samples.find((x) => x.t >= t) ?? r.samples[r.samples.length - 1]!;
   const me = res ? at(res.me) : null;
   const rv = res ? at(res.rival) : null;
   const pos = (x: number) => `${Math.min(x / 402, 1) * 82}%`;
