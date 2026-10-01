@@ -2,3 +2,9 @@
 - [x] Physics model + car SVG
 - [x] Step-by-step builder starting from empty chassis (no presets) — user request
 - [x] Speed test (drag race + top speed)
+- [x] AI engineer: describe car → AI generates compatible setup
+- [x] Visual design controls: body shape, colors, wheel styles, live preview
+- [x] Driving test: acceleration, top speed, handling (skidpad, braking, slalom, lap)
+- [x] Save multiple builds + side-by-side comparison (specs & performance)
+- [x] Mechanical editor: add differential, suspension, brakes (axles)
+- [ ] Realistic graphics: AI photo render of the car + realistic garage/track backgrounds

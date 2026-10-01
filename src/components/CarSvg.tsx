@@ -21,13 +21,23 @@ const BODIES = {
 export function CarSvg({ car, className, spin = false }: { car: CarConfig; className?: string; spin?: boolean }) {
   const b = BODIES[car.body];
   const wr = 14 + car.wheelSize * 0.9;
+  const style = car.wheelStyle ?? "rayos";
+  const lift = ((car.rideHeight ?? 0.5) - 0.5) * -12;
+  const roofS = 0.86 + (car.roof ?? 0.5) * 0.28;
   const wheel = (cx: number) => (
     <g key={cx}>
       <circle cx={cx} cy={b.wy} r={wr} fill="#0b0c0f" />
       <g className={spin ? "origin-center animate-spin" : ""} style={{ transformOrigin: `${cx}px ${b.wy}px`, animationDuration: "0.25s" }}>
         <circle cx={cx} cy={b.wy} r={wr * 0.66} fill={car.wheelColor} />
-        {[0, 72, 144, 216, 288].map((a) => (
-          <rect key={a} x={cx - 2} y={b.wy - wr * 0.62} width={4} height={wr * 0.62} fill="#0b0c0f" opacity={0.55} transform={`rotate(${a} ${cx} ${b.wy})`} />
+        {style === "rayos" && [0, 72, 144, 216, 288].map((a) => (
+          <rect key={a} x={cx - 2.5} y={b.wy - wr * 0.62} width={5} height={wr * 0.62} fill="#0b0c0f" opacity={0.55} transform={`rotate(${a} ${cx} ${b.wy})`} />
+        ))}
+        {style === "multirayo" && Array.from({ length: 10 }, (_, i) => i * 36).map((a) => (
+          <rect key={a} x={cx - 1} y={b.wy - wr * 0.62} width={2} height={wr * 0.62} fill="#0b0c0f" opacity={0.6} transform={`rotate(${a} ${cx} ${b.wy})`} />
+        ))}
+        {style === "disco" && <circle cx={cx} cy={b.wy} r={wr * 0.5} fill="none" stroke="#000" strokeOpacity={0.35} strokeWidth={2} />}
+        {style === "malla" && [0, 30, 60, 90, 120, 150].map((a) => (
+          <rect key={a} x={cx - 0.75} y={b.wy - wr * 0.62} width={1.5} height={wr * 1.24} fill="#0b0c0f" opacity={0.5} transform={`rotate(${a} ${cx} ${b.wy})`} />
         ))}
         <circle cx={cx} cy={b.wy} r={wr * 0.16} fill="#c9ccd1" />
       </g>
@@ -36,6 +46,7 @@ export function CarSvg({ car, className, spin = false }: { car: CarConfig; class
   return (
     <svg viewBox="0 0 420 150" className={className} role="img" aria-label={car.name}>
       <ellipse cx={210} cy={b.wy + wr - 2} rx={190} ry={7} fill="#000" opacity={0.45} />
+      <g transform={`translate(0 ${lift}) translate(0 112) scale(1 ${roofS}) translate(0 -112)`}>
       <path d={b.body} fill={car.color} stroke="#000" strokeOpacity={0.4} strokeWidth={1.5} />
       {car.stripes && <path d="M20 98 L400 98 L400 104 L20 104 Z" fill={car.accent} opacity={0.9} />}
       <path d={b.glass} fill="#1a2330" opacity={0.92} />
@@ -50,6 +61,7 @@ export function CarSvg({ car, className, spin = false }: { car: CarConfig; class
         </g>
       )}
       {car.downforce > 0.4 && <path d="M372 108 L408 108 L408 114 L366 114 Z" fill={car.accent} />}
+      </g>
       <defs>
         <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#fff" stopOpacity={0.35} />
