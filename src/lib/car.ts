@@ -133,18 +133,18 @@ export function simulate(c: CarConfig, maxTime = 60): Result {
   let lastSample = -1;
   while (t < maxTime) {
     const wheelRpm = (v / (2 * Math.PI * r)) * 60;
-    let rpm = Math.max(idle + (gear === 0 ? 2500 : 0), wheelRpm * ratios[gear] * c.finalDrive);
+    let rpm = Math.max(idle + (gear === 0 ? 2500 : 0), wheelRpm * ratios[gear]! * c.finalDrive);
     if (rpm > c.maxRpm * 0.985 && gear < ratios.length - 1 && shifting <= 0) {
       gear++;
       shifting = shiftTime;
-      rpm = wheelRpm * ratios[gear] * c.finalDrive;
+      rpm = wheelRpm * ratios[gear]! * c.finalDrive;
     }
     rpm = Math.min(rpm, c.maxRpm);
     const down = 0.5 * rho * v * v * s.area * c.downforce * 1.8;
     let drive = 0;
     if (shifting <= 0) {
       const tq = torqueAt(rpm, c, s.torqueNm, s.peakRpm);
-      drive = (tq * ratios[gear] * c.finalDrive * eff) / r;
+      drive = (tq * ratios[gear]! * c.finalDrive * eff) / r;
       if (rpm >= c.maxRpm) drive *= 0.2;
       const grip = mu * (s.mass * g * DRIVE_SHARE[c.drive] + down * DRIVE_SHARE[c.drive]);
       drive = Math.min(drive, grip);
