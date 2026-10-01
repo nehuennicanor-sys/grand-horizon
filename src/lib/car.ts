@@ -93,7 +93,10 @@ export function defaultCar(cat: Category = "deportivo"): CarConfig {
     brakes: cat === "normal" ? "estandar" : cat === "deportivo" ? "deportivos" : "carbono",
     rideHeight: cat === "normal" ? 0.6 : cat === "deportivo" ? 0.35 : 0.1,
     roof: cat === "normal" ? 0.6 : 0.4,
-    ...(PRESETS[cat] as Omit<CarConfig, "name" | "category" | "color" | "accent" | "wheelColor">),
+    ...PRESETS[cat],
+  } as CarConfig;
+  return {
+    ...base,
   };
 }
 
