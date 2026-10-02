@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CarSvg } from "@/components/CarSvg";
+import { CarPhoto } from "@/components/CarPhoto";
 import { useServerFn } from "@tanstack/react-start";
 import { aiDesignCar } from "@/lib/ai-build.functions";
 import { supabase } from "@/integrations/supabase/client";
@@ -210,6 +211,7 @@ function Garage() {
                     <Pill active={car.spoiler} onClick={() => set("spoiler", !car.spoiler)}>Alerón</Pill>
                     <Pill active={car.stripes} onClick={() => set("stripes", !car.stripes)}>Franja lateral</Pill>
                   </Group>
+                  <CarPhoto car={car} />
                 </Panel>
               )}
               <button onClick={install}
