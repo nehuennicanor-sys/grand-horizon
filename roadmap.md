@@ -8,3 +8,4 @@
 - [x] Save multiple builds + side-by-side comparison (specs & performance)
 - [x] Mechanical editor: add differential, suspension, brakes (axles)
 - [ ] Realistic graphics: AI photo render of the car + realistic garage/track backgrounds
+- [x] Cloud-saved builds per account (email + Google sign-in)
