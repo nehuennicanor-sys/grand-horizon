@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CarSvg } from "@/components/CarSvg";
 import { useServerFn } from "@tanstack/react-start";
 import { aiDesignCar } from "@/lib/ai-build.functions";
+import { supabase } from "@/integrations/supabase/client";
+import { AuthPanel, useUser } from "@/components/AuthPanel";
 import {
   defaultCar, gearRatios, handling, LAYOUTS, RIVALS, simulate, specs,
   type CarConfig, type Category, type Result,
@@ -48,7 +50,8 @@ function Garage() {
   const s = useMemo(() => specs(car), [car]);
   const lim = LIMITS[car.category];
   const ready = installed.every(Boolean);
-  const [saved, setSaved] = useSaved();
+  const store = useSaved();
+  const saved = store.saved;
 
   const install = () => {
     setInstalled((p) => p.map((v, i) => (i === step ? true : v)));
@@ -217,7 +220,7 @@ function Garage() {
           ) : step === 5 ? (
             <TestTrack car={car} />
           ) : (
-            <GarageCompare saved={saved} setSaved={setSaved}
+            <GarageCompare store={store}
               onLoad={(c) => { setCar(c); setInstalled([true, true, true, true, true]); setStep(4); }} />
           )}
         </section>
@@ -242,9 +245,9 @@ function Garage() {
             </ul>
           </div>
           {ready && (
-            <button onClick={() => { setSaved([...saved, { id: crypto.randomUUID(), car }]); }}
+            <button onClick={() => { if (store.user) void store.add(car); else setStep(6); }}
               className="w-full rounded-md border border-primary py-3 font-display text-xs font-bold tracking-widest text-primary transition hover:bg-primary/10">
-              GUARDAR EN EL GARAJE ({saved.length})
+              {store.user ? `GUARDAR EN EL GARAJE (${saved.length})` : "INICIÁ SESIÓN PARA GUARDAR"}
             </button>
           )}
           {!ready && <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">Instalá los 5 módulos para desbloquear la pista de pruebas.</p>}
@@ -507,18 +510,33 @@ function Bar({ label, value }: { label: string; value: number }) {
 }
 
 type SavedBuild = { id: string; car: CarConfig };
-const STORE = "garagelab.builds";
 
 function useSaved() {
+  const { user, ready } = useUser();
   const [saved, setSavedState] = useState<SavedBuild[]>([]);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    try { setSavedState(JSON.parse(localStorage.getItem(STORE) || "[]")); } catch { /* ignore */ }
-  }, []);
-  const setSaved = (v: SavedBuild[]) => { setSavedState(v); localStorage.setItem(STORE, JSON.stringify(v)); };
-  return [saved, setSaved] as const;
+    if (!user) { setSavedState([]); return; }
+    supabase.from("car_builds").select("id, config").order("created_at").then(({ data, error }) => {
+      if (error) setError("No se pudieron cargar tus autos.");
+      else setSavedState((data ?? []).map((r) => ({ id: r.id, car: r.config as unknown as CarConfig })));
+    });
+  }, [user]);
+  const add = async (car: CarConfig) => {
+    const { data, error } = await supabase.from("car_builds").insert({ config: car as never }).select("id").single();
+    if (error) { setError("No se pudo guardar el auto."); return; }
+    setSavedState((p) => [...p, { id: data.id, car }]);
+  };
+  const remove = async (id: string) => {
+    const { error } = await supabase.from("car_builds").delete().eq("id", id);
+    if (error) { setError("No se pudo borrar el auto."); return; }
+    setSavedState((p) => p.filter((x) => x.id !== id));
+  };
+  return { saved, add, remove, user, ready, error };
 }
 
-function GarageCompare({ saved, setSaved, onLoad }: { saved: SavedBuild[]; setSaved: (v: SavedBuild[]) => void; onLoad: (c: CarConfig) => void }) {
+function GarageCompare({ store, onLoad }: { store: ReturnType<typeof useSaved>; onLoad: (c: CarConfig) => void }) {
+  const { saved, remove, user, ready, error } = store;
   const [sel, setSel] = useState<string[]>([]);
   const rows = useMemo(() => saved.filter((b) => sel.includes(b.id)).map((b) => {
     const s = specs(b.car), r = simulate(b.car), h = handling(b.car, r);
@@ -541,6 +559,8 @@ function GarageCompare({ saved, setSaved, onLoad }: { saved: SavedBuild[]; setSa
     { k: "Vuelta 3 km", v: (x) => lap(x.h.lapTime), best: (x) => -x.h.lapTime },
   ];
 
+  if (!ready) return <p className="text-muted-foreground">Cargando…</p>;
+  if (!user) return <AuthPanel />;
   if (!saved.length) return (
     <div className="rounded-xl border border-dashed border-border p-10 text-center text-muted-foreground">
       Tu garaje está vacío. Terminá un auto y tocá <b className="text-foreground">Guardar en el garaje</b>.
@@ -549,6 +569,11 @@ function GarageCompare({ saved, setSaved, onLoad }: { saved: SavedBuild[]; setSa
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <span>Garaje de {user.email}</span>
+        <button onClick={() => supabase.auth.signOut()} className="text-primary">Cerrar sesión</button>
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         {saved.map((b) => (
           <div key={b.id} className={`rounded-xl border bg-card p-4 ${sel.includes(b.id) ? "border-primary" : "border-border"}`}>
@@ -558,7 +583,7 @@ function GarageCompare({ saved, setSaved, onLoad }: { saved: SavedBuild[]; setSa
             <div className="mt-3 flex gap-2">
               <Pill active={sel.includes(b.id)} onClick={() => toggle(b.id)}>{sel.includes(b.id) ? "Comparando" : "Comparar"}</Pill>
               <Pill active={false} onClick={() => onLoad(b.car)}>Editar</Pill>
-              <Pill active={false} onClick={() => { setSaved(saved.filter((x) => x.id !== b.id)); setSel((p) => p.filter((x) => x !== b.id)); }}>Borrar</Pill>
+              <Pill active={false} onClick={() => { void remove(b.id); setSel((p) => p.filter((x) => x !== b.id)); }}>Borrar</Pill>
             </div>
           </div>
         ))}
