@@ -9,3 +9,7 @@
 - [x] Mechanical editor: add differential, suspension, brakes (axles)
 - [ ] Realistic graphics: AI photo render of the car + realistic garage/track backgrounds
 - [x] Cloud-saved builds per account (email + Google sign-in)
+- [ ] Replace the 2D builder preview with an interactive, realistic 3D workshop
+- [ ] Split the build into individual creation areas for body, engine, drivetrain, suspension, brakes, wheels, aero, paint and interior
+- [ ] Replace the Normal category with Racing and add real-car-inspired design families
+- [ ] Turn the test experience into a game-like 3D driving presentation
