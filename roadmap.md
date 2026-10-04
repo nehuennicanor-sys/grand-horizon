@@ -13,3 +13,6 @@
 - [ ] Split the build into individual creation areas for body, engine, drivetrain, suspension, brakes, wheels, aero, paint and interior
 - [ ] Replace the Normal category with Racing and add real-car-inspired design families
 - [ ] Turn the test experience into a game-like 3D driving presentation
+- [x] Fix: GLB external texture references stripped, models re-uploaded
+- [ ] Next-gen graphics: realistic car model, studio lighting, contact shadows, ACES tone mapping
+- [ ] Real F1-inspired circuits with varied layouts (Monza, Spa, Silverstone, Suzuka, Interlagos, Mónaco)

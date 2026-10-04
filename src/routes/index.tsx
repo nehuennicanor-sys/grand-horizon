@@ -41,9 +41,12 @@ const GUIDES = [
   ["Interior", "Asientos, revestimientos y jaula cambian peso, seguridad y propósito. Una jaula es clave en carreras, pero innecesaria en un gran turismo."],
 ] as const;
 const CIRCUITS = [
-  { name: "Monza", country: "Italia", style: "Alta velocidad", length: 5.793, factor: 0.9, note: "Inspirado en el trazado de Monza: rectas largas, frenadas fuertes y baja carga." },
-  { name: "Silverstone", country: "Reino Unido", style: "Curvas rápidas", length: 5.891, factor: 1.04, note: "Inspirado en Silverstone: enlazadas rápidas que premian el balance aerodinámico." },
-  { name: "Suzuka", country: "Japón", style: "Técnico", length: 5.807, factor: 1.12, note: "Inspirado en Suzuka: cambios de apoyo y precisión constante. No es una reproducción oficial." },
+  { name: "Monza", country: "Italia", style: "Alta velocidad", length: 5.793, factor: 0.88, note: "Inspirado en el Templo de la Velocidad: rectas enormes, frenadas límite y baja carga aerodinámica." },
+  { name: "Spa-Francorchamps", country: "Bélgica", style: "Mixto rápido", length: 7.004, factor: 0.98, note: "Inspirado en Spa: Eau Rouge, subidas y curvas rápidas en el trazado más largo del calendario." },
+  { name: "Silverstone", country: "Reino Unido", style: "Curvas rápidas", length: 5.891, factor: 1.04, note: "Inspirado en Silverstone: enlazadas como Maggotts y Becketts que premian el balance aerodinámico." },
+  { name: "Suzuka", country: "Japón", style: "Técnico", length: 5.807, factor: 1.12, note: "Inspirado en Suzuka: la S de curvas, Degner y 130R exigen precisión constante." },
+  { name: "Interlagos", country: "Brasil", style: "Ondulado", length: 4.309, factor: 1.1, note: "Inspirado en Interlagos: corto, con subidas, bajadas y la larga curva final hacia la recta." },
+  { name: "Montecarlo", country: "Mónaco", style: "Muchas curvas", length: 3.337, factor: 1.32, note: "Inspirado en Mónaco: callejero lento y revirado, donde el agarre mecánico lo es todo. No son reproducciones oficiales." },
 ] as const;
 
 function blankCar() { return { ...defaultCar("deportivo"), name: "Proyecto 001", spoiler: false, stripes: false, rollCage: false }; }
