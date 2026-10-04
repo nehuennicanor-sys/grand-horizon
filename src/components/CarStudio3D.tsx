@@ -5,17 +5,26 @@ import * as THREE from "three";
 import type { CarConfig, Sample } from "@/lib/car";
 import toyCarAsset from "@/assets/models/toy-car.glb.asset.json";
 
-const BODY_TRANSFORM: Record<CarConfig["body"], { scale: [number, number, number]; y: number }> = {
-  sedan: { scale: [1, 1.02, 1.02], y: 0 },
-  coupe: { scale: [0.98, 0.94, 0.98], y: 0 },
-  hiper: { scale: [0.96, 0.88, 0.96], y: 0 },
+const BODY_TRANSFORM: Record<CarConfig["body"], [number, number, number]> = {
+  sedan: [1, 1.02, 1.02],
+  coupe: [0.98, 0.94, 0.98],
+  hiper: [0.96, 0.88, 0.96],
 };
 
 function useCarModel(car: CarConfig) {
   const { scene } = useGLTF(toyCarAsset.url);
   return useMemo(() => {
     const clone = scene.clone(true);
-    clone.traverse((node) => {
+    // Normalizar: el modelo fuente viene en centímetros con escala 0.0001
+    const box = new THREE.Box3().setFromObject(clone);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const k = 4.3 / Math.max(size.x, size.z);
+    const wrapper = new THREE.Group();
+    clone.scale.multiplyScalar(k);
+    clone.position.set(-center.x * k, -box.min.y * k, -center.z * k);
+    wrapper.add(clone);
+    wrapper.traverse((node) => {
       if (!(node instanceof THREE.Mesh)) return;
       node.castShadow = true;
       node.receiveShadow = true;
