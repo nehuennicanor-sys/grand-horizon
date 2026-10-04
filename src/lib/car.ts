@@ -1,4 +1,4 @@
-export type Category = "normal" | "deportivo" | "super";
+export type Category = "deportivo" | "superdeportivo" | "carreras";
 export type Layout = "I3" | "I4" | "I6" | "V6" | "V8" | "V10" | "V12" | "W16";
 export type Aspiration = "atmosferico" | "turbo" | "biturbo" | "compresor";
 export type Gearbox = "manual" | "automatica" | "doble-embrague";
@@ -10,6 +10,8 @@ export type Suspension = "confort" | "deportiva" | "competicion";
 export type Brakes = "estandar" | "deportivos" | "carbono";
 export type WheelStyle = "rayos" | "multirayo" | "disco" | "malla";
 export type Body = "sedan" | "coupe" | "hiper";
+export type SeatStyle = "touring" | "bucket" | "carbono";
+export type InteriorTrim = "alcantara" | "cuero" | "competicion";
 
 export interface CarConfig {
   name: string;
@@ -39,6 +41,10 @@ export interface CarConfig {
   brakes: Brakes;
   rideHeight: number; // 0 (low) .. 1 (high)
   roof: number; // 0 (low) .. 1 (tall)
+  interiorColor: string;
+  seatStyle: SeatStyle;
+  interiorTrim: InteriorTrim;
+  rollCage: boolean;
 }
 
 export const LAYOUTS: Record<Layout, { cyl: number; weight: number; factor: number }> = {
@@ -75,24 +81,28 @@ const DRIVE_SHARE = { FWD: 0.58, RWD: 0.62, AWD: 1 } as const;
 const DRIVE_EFF = { FWD: 0.9, RWD: 0.88, AWD: 0.84 } as const;
 
 export const PRESETS: Record<Category, Partial<CarConfig>> = {
-  normal: { layout: "I4", displacement: 1.6, aspiration: "atmosferico", maxRpm: 6200, boost: 0.3, gearbox: "manual", gears: 5, finalDrive: 4.1, drive: "FWD", material: "acero", tires: "eco", downforce: 0, body: "sedan", spoiler: false, stripes: false, wheelSize: 16 },
   deportivo: { layout: "I6", displacement: 3.0, aspiration: "biturbo", maxRpm: 7200, boost: 0.5, gearbox: "doble-embrague", gears: 7, finalDrive: 3.4, drive: "RWD", material: "aluminio", tires: "deportivo", downforce: 0.3, body: "coupe", spoiler: true, stripes: true, wheelSize: 19 },
-  super: { layout: "V12", displacement: 6.5, aspiration: "atmosferico", maxRpm: 9000, boost: 0.5, gearbox: "doble-embrague", gears: 7, finalDrive: 3.0, drive: "AWD", material: "carbono", tires: "semi-slick", downforce: 0.6, body: "hiper", spoiler: true, stripes: false, wheelSize: 21 },
+  superdeportivo: { layout: "V12", displacement: 6.5, aspiration: "atmosferico", maxRpm: 9000, boost: 0.5, gearbox: "doble-embrague", gears: 7, finalDrive: 3.0, drive: "AWD", material: "carbono", tires: "semi-slick", downforce: 0.6, body: "hiper", spoiler: true, stripes: false, wheelSize: 21 },
+  carreras: { layout: "V8", displacement: 4.0, aspiration: "biturbo", maxRpm: 8500, boost: 0.65, gearbox: "doble-embrague", gears: 7, finalDrive: 3.7, drive: "RWD", material: "carbono", tires: "semi-slick", downforce: 0.85, body: "coupe", spoiler: true, stripes: true, wheelSize: 19 },
 };
 
 export function defaultCar(cat: Category = "deportivo"): CarConfig {
   return {
     name: "Proyecto X",
     category: cat,
-    color: cat === "super" ? "#ff5a1f" : cat === "deportivo" ? "#e8eef5" : "#2f6fd6",
+    color: cat === "superdeportivo" ? "#ff5a1f" : cat === "carreras" ? "#d8312b" : "#e8eef5",
     accent: "#111318",
     wheelColor: "#2a2d33",
     wheelStyle: "rayos",
-    diff: cat === "normal" ? "abierto" : cat === "deportivo" ? "autoblocante" : "electronico",
-    suspension: cat === "normal" ? "confort" : cat === "deportivo" ? "deportiva" : "competicion",
-    brakes: cat === "normal" ? "estandar" : cat === "deportivo" ? "deportivos" : "carbono",
-    rideHeight: cat === "normal" ? 0.6 : cat === "deportivo" ? 0.35 : 0.1,
-    roof: cat === "normal" ? 0.6 : 0.4,
+    diff: cat === "deportivo" ? "autoblocante" : "electronico",
+    suspension: cat === "deportivo" ? "deportiva" : "competicion",
+    brakes: cat === "deportivo" ? "deportivos" : "carbono",
+    rideHeight: cat === "deportivo" ? 0.35 : 0.12,
+    roof: cat === "superdeportivo" ? 0.25 : 0.4,
+    interiorColor: "#17191d",
+    seatStyle: cat === "deportivo" ? "touring" : "carbono",
+    interiorTrim: cat === "carreras" ? "competicion" : "alcantara",
+    rollCage: cat === "carreras",
     ...PRESETS[cat],
   } as CarConfig;
 }
@@ -187,10 +197,15 @@ export function simulate(c: CarConfig, maxTime = 60): Result {
 }
 
 export const RIVALS: { name: string; car: CarConfig }[] = [
-  { name: "Hatchback familiar", car: { ...defaultCar("normal"), color: "#9aa3ad" } },
-  { name: "Coupé deportivo", car: { ...defaultCar("deportivo"), color: "#d8312b" } },
-  { name: "Hiperauto V12", car: { ...defaultCar("super"), color: "#f5c518" } },
+  { name: "GT deportivo", car: { ...defaultCar("deportivo"), color: "#9aa3ad" } },
+  { name: "Prototipo de carreras", car: { ...defaultCar("carreras"), color: "#d8312b" } },
+  { name: "Hiperauto V12", car: { ...defaultCar("superdeportivo"), color: "#f5c518" } },
 ];
+
+export function normalizeCar(raw: Partial<CarConfig> & { category?: string }): CarConfig {
+  const category: Category = raw.category === "super" ? "superdeportivo" : raw.category === "normal" ? "carreras" : raw.category === "carreras" || raw.category === "superdeportivo" ? raw.category : "deportivo";
+  return { ...defaultCar(category), ...raw, category };
+}
 
 export interface Handling { lateralG: number; braking: number; slalom: number; lapTime: number; rating: number }
 
