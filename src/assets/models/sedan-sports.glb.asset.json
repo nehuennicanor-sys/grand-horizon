@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "asset_id": "ef438d86-d6ae-4daa-a0f5-ec4346f1ede8",
+  "asset_id": "14f20e0c-b862-42f1-9046-32d28e8c084c",
   "project_id": "9168b3a2-14bc-4f1e-b789-43271935fd5a",
-  "url": "/__l5e/assets-v1/ef438d86-d6ae-4daa-a0f5-ec4346f1ede8/sedan-sports.glb",
-  "r2_key": "a/v1/9168b3a2-14bc-4f1e-b789-43271935fd5a/ef438d86-d6ae-4daa-a0f5-ec4346f1ede8/sedan-sports.glb",
+  "url": "/__l5e/assets-v1/14f20e0c-b862-42f1-9046-32d28e8c084c/sedan-sports.glb",
+  "r2_key": "a/v1/9168b3a2-14bc-4f1e-b789-43271935fd5a/14f20e0c-b862-42f1-9046-32d28e8c084c/sedan-sports.glb",
   "original_filename": "sedan-sports.glb",
-  "size": 177676,
+  "size": 177296,
   "content_type": "model/gltf-binary",
-  "created_at": "2026-10-04T02:55:14Z"
+  "created_at": "2026-10-04T03:06:44Z"
 }
