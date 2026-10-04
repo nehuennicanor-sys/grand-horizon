@@ -54,7 +54,7 @@ function useCarModel(car: CarConfig) {
       }
       node.material = mat;
     });
-    return clone;
+    return wrapper;
   }, [scene, car.color]);
 }
 
