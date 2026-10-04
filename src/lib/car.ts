@@ -202,7 +202,7 @@ export const RIVALS: { name: string; car: CarConfig }[] = [
   { name: "Hiperauto V12", car: { ...defaultCar("superdeportivo"), color: "#f5c518" } },
 ];
 
-export function normalizeCar(raw: Partial<CarConfig> & { category?: string }): CarConfig {
+export function normalizeCar(raw: Omit<Partial<CarConfig>, "category"> & { category?: string }): CarConfig {
   const category: Category = raw.category === "super" ? "superdeportivo" : raw.category === "normal" ? "carreras" : raw.category === "carreras" || raw.category === "superdeportivo" ? raw.category : "deportivo";
   return { ...defaultCar(category), ...raw, category };
 }
