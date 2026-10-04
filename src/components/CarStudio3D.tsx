@@ -105,7 +105,7 @@ function Vehicle({ car, installed, focus, moving = false }: { car: CarConfig; in
     {installed[3] && !mounted && <group><mesh position={[0, 0.32, -0.7]} rotation-z={Math.PI / 2}><cylinderGeometry args={[0.04, 0.04, 0.84, 12]} /><meshStandardMaterial color="#a9b0b5" metalness={0.95} roughness={0.2} /></mesh><mesh position={[0, 0.32, 0.66]} rotation-z={Math.PI / 2}><cylinderGeometry args={[0.04, 0.04, 0.84, 12]} /><meshStandardMaterial color="#a9b0b5" metalness={0.95} roughness={0.2} /></mesh></group>}
     {installed[1] && !mounted && <Engine car={car} />}
     {mounted
-      ? <group position-y={lifted} scale={body.scale} position-x={-0.02}><primitive object={model} /></group>
+      ? <group position-y={lifted} scale={body} position-x={-0.02}><primitive object={model} /></group>
       : [-0.37, 0.37].flatMap((x) => [-0.7, 0.66].map((z) => <Wheel key={`${x}-${z}`} x={x} z={z} car={car} moving={moving} />))}
     {mounted && car.spoiler && <group position={[0, 0.78 + lifted, -1.02]}><mesh castShadow><boxGeometry args={[1.15, 0.04, 0.22]} /><meshPhysicalMaterial color={car.accent} metalness={0.7} roughness={0.25} clearcoat={0.8} /></mesh><mesh position={[-0.34, -0.12, 0]}><boxGeometry args={[0.035, 0.24, 0.05]} /><meshStandardMaterial color="#2c3033" metalness={0.6} /></mesh><mesh position={[0.34, -0.12, 0]}><boxGeometry args={[0.035, 0.24, 0.05]} /><meshStandardMaterial color="#2c3033" metalness={0.6} /></mesh></group>}
   </group>;
