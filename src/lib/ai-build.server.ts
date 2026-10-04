@@ -6,7 +6,7 @@ const RUN_ID = "X-Lovable-AIG-Run-ID";
 
 export const buildSchema = z.object({
   name: z.string(),
-  category: z.enum(["normal", "deportivo", "super"]),
+  category: z.enum(["deportivo", "superdeportivo", "carreras"]),
   layout: z.enum(["I3", "I4", "I6", "V6", "V8", "V10", "V12", "W16"]),
   displacement: z.number(),
   aspiration: z.enum(["atmosferico", "turbo", "biturbo", "compresor"]),
@@ -34,9 +34,9 @@ export const buildSchema = z.object({
 
 const SYSTEM = `Sos un ingeniero automotriz. A partir de la descripción del usuario, diseñá una configuración de auto compatible y coherente.
 Reglas de compatibilidad (obligatorias):
-- normal: layout I3/I4/I6/V6, cilindrada 1.0–3.0 L, maxRpm 5000–7000.
 - deportivo: layout I4/I6/V6/V8, cilindrada 1.6–5.0 L, maxRpm 6000–8500.
-- super: layout V8/V10/V12/W16, cilindrada 3.0–8.0 L, maxRpm 7000–9500.
+- superdeportivo: layout V8/V10/V12/W16, cilindrada 3.0–8.0 L, maxRpm 7000–9500.
+- carreras: layout I4/V6/V8/V10, cilindrada 1.6–5.5 L, maxRpm 7000–9500, piezas enfocadas en pista.
 - boost 0–1 (presión del turbo; usar 0.5 si es atmosférico). gears 4–8 enteros. finalDrive 2.5–4.6.
 - downforce 0–1. wheelSize 15–22 enteros. Colores en hex #rrggbb.
 - Elegí tracción y caja coherentes con la potencia (mucha potencia → AWD o RWD con semi-slick).

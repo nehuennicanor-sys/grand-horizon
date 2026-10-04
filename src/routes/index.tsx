@@ -1,619 +1,150 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { CarSvg } from "@/components/CarSvg";
-import { CarPhoto } from "@/components/CarPhoto";
 import { useServerFn } from "@tanstack/react-start";
-import { aiDesignCar } from "@/lib/ai-build.functions";
-import { supabase } from "@/integrations/supabase/client";
+import { BookOpen, Check, ChevronRight, CircleGauge, Cloud, Flag, Garage as GarageIcon, Info, RotateCcw, Sparkles, Wrench } from "lucide-react";
+import { CarStudio3D, Race3D } from "@/components/CarStudio3D";
+import { CarPhoto } from "@/components/CarPhoto";
 import { AuthPanel, useUser } from "@/components/AuthPanel";
-import {
-  defaultCar, gearRatios, handling, LAYOUTS, RIVALS, simulate, specs,
-  type CarConfig, type Category, type Result,
-} from "@/lib/car";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { aiDesignCar } from "@/lib/ai-build.functions";
+import { defaultCar, gearRatios, handling, normalizeCar, RIVALS, simulate, specs, type CarConfig, type Category, type Result } from "@/lib/car";
 
 export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Garage Lab — Armá tu auto desde cero" },
-      { name: "description", content: "Diseñá motor, transmisión, chasis y carrocería de tu auto, y ponelo a prueba en la pista." },
-      { property: "og:title", content: "Garage Lab — Armá tu auto desde cero" },
-      { property: "og:description", content: "Diseñá cada pieza de tu auto y probá su velocidad." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
-  component: Garage,
+  ssr: false,
+  head: () => ({ meta: [
+    { title: "Garage Lab — Simulador 3D de construcción automotriz" },
+    { name: "description", content: "Construí un deportivo pieza por pieza en un taller 3D, aprendé mecánica y probalo en circuitos inspirados en pistas reales." },
+    { property: "og:title", content: "Garage Lab — Juego de construcción automotriz 3D" },
+    { property: "og:description", content: "Diseñá motor, chasis, transmisión, interior y carrocería; guardá tu auto y llevalo a la pista." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary_large_image" },
+  ] }),
+  component: GarageGame,
 });
 
-const STEPS = ["Clase", "Motor", "Transmisión", "Chasis", "Diseño", "Prueba", "Garaje"] as const;
-const LIMITS: Record<Category, { disp: [number, number]; rpm: [number, number]; layouts: string[] }> = {
-  normal: { disp: [1, 3], rpm: [5000, 7000], layouts: ["I3", "I4", "I6", "V6"] },
+const STATIONS = ["Proyecto", "Motor", "Transmisión", "Chasis", "Suspensión", "Frenos", "Ruedas", "Carrocería", "Interior"] as const;
+const LIMITS: Record<Category, { disp: [number, number]; rpm: [number, number]; layouts: CarConfig["layout"][] }> = {
   deportivo: { disp: [1.6, 5], rpm: [6000, 8500], layouts: ["I4", "I6", "V6", "V8"] },
-  super: { disp: [3, 8], rpm: [7000, 9500], layouts: ["V8", "V10", "V12", "W16"] },
+  superdeportivo: { disp: [3, 8], rpm: [7000, 9500], layouts: ["V8", "V10", "V12", "W16"] },
+  carreras: { disp: [1.6, 5.5], rpm: [7000, 9500], layouts: ["I4", "V6", "V8", "V10"] },
 };
+const GUIDES = [
+  ["Proyecto", "La categoría define el rango de piezas homologadas. Deportivo prioriza equilibrio; Superdeportivo, potencia y tecnología; Carreras elimina compromisos de calle."],
+  ["Motor", "Convierte combustible en movimiento. Más cilindrada suele dar más torque; turbo aumenta potencia, mientras un motor atmosférico responde de forma más lineal."],
+  ["Transmisión", "Lleva la fuerza del motor a las ruedas. Una relación final corta acelera mejor; una larga permite mayor velocidad punta."],
+  ["Chasis", "Es el esqueleto del auto. Menos peso mejora aceleración, frenado y curvas, pero los materiales avanzados son propios de proyectos extremos."],
+  ["Suspensión", "Mantiene los neumáticos en contacto con el asfalto. Una puesta a punto rígida responde rápido, aunque tolera menos los baches."],
+  ["Frenos", "Transforman velocidad en calor. Los carbono-cerámicos resisten vueltas exigentes sin perder eficacia."],
+  ["Ruedas", "Son el único contacto con la pista. Los semi-slick ofrecen más agarre en seco; llantas grandes mejoran precisión pero agregan masa."],
+  ["Carrocería", "Define la resistencia al aire y la carga aerodinámica. Un alerón agrega agarre rápido, pero también resistencia y peso."],
+  ["Interior", "Asientos, revestimientos y jaula cambian peso, seguridad y propósito. Una jaula es clave en carreras, pero innecesaria en un gran turismo."],
+] as const;
+const CIRCUITS = [
+  { name: "Monza", country: "Italia", style: "Alta velocidad", length: 5.793, factor: 0.9, note: "Inspirado en el trazado de Monza: rectas largas, frenadas fuertes y baja carga." },
+  { name: "Silverstone", country: "Reino Unido", style: "Curvas rápidas", length: 5.891, factor: 1.04, note: "Inspirado en Silverstone: enlazadas rápidas que premian el balance aerodinámico." },
+  { name: "Suzuka", country: "Japón", style: "Técnico", length: 5.807, factor: 1.12, note: "Inspirado en Suzuka: cambios de apoyo y precisión constante. No es una reproducción oficial." },
+] as const;
 
-// Empty chassis: neutral starting values, nothing installed.
-function blankCar(): CarConfig {
-  return {
-    ...defaultCar("normal"),
-    name: "Mi auto", layout: "I4", displacement: 2, aspiration: "atmosferico", maxRpm: 6500, boost: 0.5,
-    gearbox: "manual", gears: 6, finalDrive: 3.6, drive: "RWD", material: "acero", tires: "deportivo",
-    downforce: 0, body: "coupe", color: "#8a8f98", accent: "#1a1c21", wheelColor: "#2a2d33",
-    spoiler: false, stripes: false, wheelSize: 17, wheelStyle: "rayos", rideHeight: 0.5, roof: 0.5, diff: "abierto", suspension: "confort", brakes: "estandar",
-  };
-}
+function blankCar() { return { ...defaultCar("deportivo"), name: "Proyecto 001", spoiler: false, stripes: false, rollCage: false }; }
 
-function Garage() {
+function GarageGame() {
   const [car, setCar] = useState<CarConfig>(blankCar);
-  const [step, setStep] = useState(0);
-  const [installed, setInstalled] = useState<boolean[]>([false, false, false, false, false]);
-  const set = <K extends keyof CarConfig>(k: K, v: CarConfig[K]) => setCar((c) => ({ ...c, [k]: v }));
-  const s = useMemo(() => specs(car), [car]);
-  const lim = LIMITS[car.category];
-  const ready = installed.every(Boolean);
+  const [station, setStation] = useState(0);
+  const [installed, setInstalled] = useState(() => Array(9).fill(false) as boolean[]);
+  const [mode, setMode] = useState<"workshop" | "track" | "garage">("workshop");
+  const [guideOpen, setGuideOpen] = useState(true);
   const store = useSaved();
-  const saved = store.saved;
-
+  const stat = useMemo(() => specs(car), [car]);
+  const complete = installed.every(Boolean);
+  const set = <K extends keyof CarConfig>(key: K, value: CarConfig[K]) => setCar((current) => ({ ...current, [key]: value }));
+  const chooseCategory = (category: Category) => {
+    const l = LIMITS[category];
+    setCar((current) => ({ ...current, category, displacement: clamp(current.displacement, ...l.disp), maxRpm: clamp(current.maxRpm, ...l.rpm), layout: l.layouts.includes(current.layout) ? current.layout : l.layouts[0] }));
+  };
   const install = () => {
-    setInstalled((p) => p.map((v, i) => (i === step ? true : v)));
-    setStep((x) => Math.min(x + 1, 5));
+    setInstalled((current) => current.map((value, index) => index === station ? true : value));
+    if (station < STATIONS.length - 1) setStation((value) => value + 1);
   };
+  return <div className="min-h-screen bg-background font-sans text-foreground">
+    <header className="border-b border-border bg-card/95">
+      <div className="mx-auto flex max-w-[1600px] items-center justify-between px-4 py-3 sm:px-6">
+        <div className="flex items-center gap-3"><div className="grid h-9 w-9 place-items-center border border-primary bg-primary/10"><Wrench className="h-4 w-4 text-primary" /></div><div><h1 className="font-display text-base font-black">GARAGE <span className="text-primary">LAB</span></h1><p className="font-mono text-[9px] text-muted-foreground">AUTOMOTIVE ENGINEERING SIMULATOR</p></div></div>
+        <div className="flex items-center gap-1">
+          <TopButton active={mode === "workshop"} onClick={() => setMode("workshop")} icon={<Wrench />}>Taller</TopButton>
+          <TopButton active={mode === "track"} disabled={!complete} onClick={() => setMode("track")} icon={<Flag />}>Pista</TopButton>
+          <TopButton active={mode === "garage"} onClick={() => setMode("garage")} icon={<GarageIcon />}>Garaje</TopButton>
+        </div>
+      </div>
+    </header>
 
-  const pickCategory = (c: Category) => {
-    const L = LIMITS[c];
-    setCar((p) => ({
-      ...p, category: c,
-      displacement: Math.min(Math.max(p.displacement, L.disp[0]), L.disp[1]),
-      maxRpm: Math.min(Math.max(p.maxRpm, L.rpm[0]), L.rpm[1]),
-      layout: (L.layouts.includes(p.layout) ? p.layout : L.layouts[0]) as CarConfig["layout"],
-    }));
-  };
+    {mode === "workshop" && <main className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <div><p className="font-mono text-[10px] uppercase text-primary">Hangar 01 · Banco de desarrollo</p><h2 className="font-display text-2xl font-bold sm:text-3xl">CONSTRUÍ TU MÁQUINA</h2></div>
+        <div className="flex items-center gap-3 font-mono text-xs"><span className="text-muted-foreground">PROGRESO</span><div className="h-1.5 w-32 bg-muted"><div className="h-full bg-primary transition-all" style={{ width: `${installed.filter(Boolean).length / 9 * 100}%` }} /></div><b>{installed.filter(Boolean).length}/9</b></div>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[230px_minmax(0,1fr)_370px]">
+        <aside className="border border-border bg-card">
+          <div className="border-b border-border p-4"><p className="font-display text-xs font-bold tracking-widest">ESTACIONES</p></div>
+          <nav className="p-2">{STATIONS.map((name, index) => <button key={name} onClick={() => setStation(index)} className={`mb-1 flex w-full items-center gap-3 border-l-2 px-3 py-3 text-left transition ${station === index ? "border-primary bg-primary/10 text-primary" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}><span className="grid h-6 w-6 place-items-center border border-current font-mono text-[10px]">{installed[index] ? <Check className="h-3 w-3" /> : String(index + 1).padStart(2, "0")}</span><span className="font-display text-[11px] font-bold uppercase tracking-wide">{name}</span><ChevronRight className="ml-auto h-3 w-3" /></button>)}</nav>
+          <div className="m-3 border border-border bg-background p-3"><p className="mb-1 font-mono text-[9px] text-muted-foreground">ESTADO DEL PROYECTO</p><p className={`font-display text-xs font-bold ${complete ? "text-accent" : "text-primary"}`}>{complete ? "LISTO PARA PISTA" : "EN DESARROLLO"}</p></div>
+        </aside>
 
-  return (
-    <div className="min-h-screen bg-background bg-hero font-sans text-foreground">
-      <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
-        <h1 className="font-display text-xl font-black tracking-widest">GARAGE<span className="text-primary">LAB</span></h1>
-        <p className="hidden text-sm text-muted-foreground sm:block">Armá tu auto pieza por pieza</p>
-      </header>
-
-      <nav className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-6 pb-4">
-        {STEPS.map((name, i) => {
-          const locked = i === 5 && !ready;
-          return (
-            <button key={name} disabled={locked} onClick={() => setStep(i)}
-              className={`flex shrink-0 items-center gap-2 rounded-md border px-4 py-2 font-display text-xs tracking-wider transition ${
-                step === i ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:border-primary"
-              } disabled:cursor-not-allowed disabled:opacity-40`}>
-              <span className={`grid h-5 w-5 place-items-center rounded-full text-[10px] ${installed[i] ? "bg-accent text-accent-foreground" : "bg-muted"}`}>
-                {i === 6 ? "★" : installed[i] ? "✓" : i + 1}
-              </span>
-              {name.toUpperCase()}
-            </button>
-          );
-        })}
-      </nav>
-
-      <main className="mx-auto grid max-w-7xl gap-6 px-6 pb-16 lg:grid-cols-[1fr_380px]">
-        <section className="space-y-6">
-          <div className="relative overflow-hidden rounded-xl border border-border bg-card p-6">
-            <div className="absolute inset-x-0 bottom-10 h-px bg-border" />
-            <BuildPreview car={car} installed={installed} />
-            <div className="mt-2 flex items-end justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-widest text-muted-foreground">{car.category}</p>
-                <p className="font-display text-2xl font-bold">{car.name || "Sin nombre"}</p>
-              </div>
-              <p className="font-mono text-xs text-muted-foreground">{installed.filter(Boolean).length}/5 módulos</p>
-            </div>
-          </div>
-
-          {step < 5 ? (
-            <div className="rounded-xl border border-border bg-card p-6">
-              {step === 0 && (
-                <AiEngineer onBuild={(c) => { setCar(c); setInstalled([true, true, true, true, true]); }} />
-              )}
-              {step === 0 && (
-                <Panel title="Elegí la clase" hint="Define qué piezas vas a poder usar.">
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {([["normal", "Normal", "Uso diario, eficiente"], ["deportivo", "Deportivo", "Equilibrio y potencia"], ["super", "Superdeportivo", "Sin límites"]] as const).map(([k, l, d]) => (
-                      <Choice key={k} active={car.category === k} onClick={() => pickCategory(k)} title={l} desc={d} />
-                    ))}
-                  </div>
-                  <label className="block">
-                    <span className="text-sm text-muted-foreground">Nombre del proyecto</span>
-                    <input value={car.name} onChange={(e) => set("name", e.target.value)} maxLength={24}
-                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-display outline-none focus:border-primary" />
-                  </label>
-                </Panel>
-              )}
-              {step === 1 && (
-                <Panel title="Diseñá el motor" hint="Cilindros, cilindrada, aspiración y régimen.">
-                  <Group label="Configuración de cilindros">
-                    {lim.layouts.map((l) => <Pill key={l} active={car.layout === l} onClick={() => set("layout", l as CarConfig["layout"])}>{l}</Pill>)}
-                  </Group>
-                  <Range label="Cilindrada" value={car.displacement} min={lim.disp[0]} max={lim.disp[1]} step={0.1} unit="L" onChange={(v) => set("displacement", v)} />
-                  <Group label="Aspiración">
-                    {([["atmosferico", "Atmosférico"], ["turbo", "Turbo"], ["biturbo", "Biturbo"], ["compresor", "Compresor"]] as const).map(([k, l]) =>
-                      <Pill key={k} active={car.aspiration === k} onClick={() => set("aspiration", k)}>{l}</Pill>)}
-                  </Group>
-                  {car.aspiration !== "atmosferico" && <Range label="Presión de soplado" value={car.boost} min={0} max={1} step={0.05} unit="" fmt={(v) => `${(0.4 + v * 1.2).toFixed(1)} bar`} onChange={(v) => set("boost", v)} />}
-                  <Range label="Corte de RPM" value={car.maxRpm} min={lim.rpm[0]} max={lim.rpm[1]} step={100} unit="rpm" onChange={(v) => set("maxRpm", v)} />
-                </Panel>
-              )}
-              {step === 2 && (
-                <Panel title="Transmisión y eje" hint="Caja, relaciones y tracción.">
-                  <Group label="Caja de cambios">
-                    {([["manual", "Manual"], ["automatica", "Automática"], ["doble-embrague", "Doble embrague"]] as const).map(([k, l]) =>
-                      <Pill key={k} active={car.gearbox === k} onClick={() => set("gearbox", k)}>{l}</Pill>)}
-                  </Group>
-                  <Range label="Cantidad de marchas" value={car.gears} min={4} max={8} step={1} unit="" onChange={(v) => set("gears", v)} />
-                  <Range label="Relación final del diferencial" value={car.finalDrive} min={2.5} max={4.6} step={0.05} unit=":1" fmt={(v) => `${v.toFixed(2)}:1`} onChange={(v) => set("finalDrive", v)} />
-                  <p className="text-xs text-muted-foreground">Corta = más aceleración. Larga = más velocidad final.</p>
-                  <Group label="Tracción (eje motriz)">
-                    {([["FWD", "Delantera"], ["RWD", "Trasera"], ["AWD", "Integral 4x4"]] as const).map(([k, l]) =>
-                      <Pill key={k} active={car.drive === k} onClick={() => set("drive", k)}>{l}</Pill>)}
-                  </Group>
-                  <Group label="Diferencial">
-                    {([["abierto", "Abierto"], ["autoblocante", "Autoblocante (LSD)"], ["electronico", "Electrónico"]] as const).map(([k, l]) =>
-                      <Pill key={k} active={car.diff === k} onClick={() => set("diff", k)}>{l}</Pill>)}
-                  </Group>
-                  <div className="flex flex-wrap gap-2 font-mono text-xs text-muted-foreground">
-                    {gearRatios(car).map((r, i) => <span key={i} className="rounded bg-muted px-2 py-1">{i + 1}ª {r.toFixed(2)}</span>)}
-                  </div>
-                </Panel>
-              )}
-              {step === 3 && (
-                <Panel title="Chasis, ejes y aerodinámica" hint="Material, suspensión, frenos, neumáticos y carga aerodinámica.">
-                  <Group label="Suspensión">
-                    {([["confort", "Confort"], ["deportiva", "Deportiva"], ["competicion", "Competición"]] as const).map(([k, l]) =>
-                      <Pill key={k} active={car.suspension === k} onClick={() => set("suspension", k)}>{l}</Pill>)}
-                  </Group>
-                  <Group label="Frenos">
-                    {([["estandar", "Estándar"], ["deportivos", "Deportivos"], ["carbono", "Carbono-cerámicos"]] as const).map(([k, l]) =>
-                      <Pill key={k} active={car.brakes === k} onClick={() => set("brakes", k)}>{l}</Pill>)}
-                  </Group>
-                  <Group label="Material">
-                    {([["acero", "Acero"], ["aluminio", "Aluminio"], ["carbono", "Fibra de carbono"]] as const).map(([k, l]) =>
-                      <Pill key={k} active={car.material === k} onClick={() => set("material", k)}>{l}</Pill>)}
-                  </Group>
-                  <Group label="Neumáticos">
-                    {([["eco", "Eco"], ["deportivo", "Deportivos"], ["semi-slick", "Semi-slick"]] as const).map(([k, l]) =>
-                      <Pill key={k} active={car.tires === k} onClick={() => set("tires", k)}>{l}</Pill>)}
-                  </Group>
-                  <Range label="Carga aerodinámica" value={car.downforce} min={0} max={1} step={0.05} unit="" fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set("downforce", v)} />
-                  <Range label="Tamaño de llantas" value={car.wheelSize} min={15} max={22} step={1} unit="″" onChange={(v) => set("wheelSize", v)} />
-                </Panel>
-              )}
-              {step === 4 && (
-                <Panel title="Diseño y aspecto" hint="Carrocería, colores y detalles.">
-                  <Group label="Carrocería">
-                    {([["sedan", "Sedán"], ["coupe", "Coupé"], ["hiper", "Hiperauto"]] as const).map(([k, l]) =>
-                      <Pill key={k} active={car.body === k} onClick={() => set("body", k)}>{l}</Pill>)}
-                  </Group>
-                  <Range label="Altura de manejo" value={car.rideHeight} min={0} max={1} step={0.05} unit="" fmt={(v) => `${Math.round(60 + v * 120)} mm`} onChange={(v) => set("rideHeight", v)} />
-                  <Range label="Altura del techo" value={car.roof} min={0} max={1} step={0.05} unit="" fmt={(v) => (v < 0.33 ? "Bajo" : v < 0.66 ? "Medio" : "Alto")} onChange={(v) => set("roof", v)} />
-                  <Group label="Colores rápidos">
-                    {["#e8eef5", "#111318", "#d8312b", "#ff5a1f", "#f5c518", "#2f6fd6", "#1f8a5b", "#8a8f98"].map((c) => (
-                      <button key={c} aria-label={`Color ${c}`} onClick={() => set("color", c)}
-                        className={`h-8 w-8 rounded-full border-2 ${car.color === c ? "border-primary" : "border-border"}`} style={{ background: c }} />
-                    ))}
-                  </Group>
-                  <Group label="Estilo de llantas">
-                    {([["rayos", "5 rayos"], ["multirayo", "Multirayo"], ["disco", "Disco aero"], ["malla", "Malla"]] as const).map(([k, l]) =>
-                      <Pill key={k} active={car.wheelStyle === k} onClick={() => set("wheelStyle", k)}>{l}</Pill>)}
-                  </Group>
-                  <div className="grid grid-cols-3 gap-3">
-                    <Color label="Pintura" value={car.color} onChange={(v) => set("color", v)} />
-                    <Color label="Detalles" value={car.accent} onChange={(v) => set("accent", v)} />
-                    <Color label="Llantas" value={car.wheelColor} onChange={(v) => set("wheelColor", v)} />
-                  </div>
-                  <Group label="Extras">
-                    <Pill active={car.spoiler} onClick={() => set("spoiler", !car.spoiler)}>Alerón</Pill>
-                    <Pill active={car.stripes} onClick={() => set("stripes", !car.stripes)}>Franja lateral</Pill>
-                  </Group>
-                  <CarPhoto car={car} />
-                </Panel>
-              )}
-              <button onClick={install}
-                className="mt-6 w-full rounded-md bg-primary py-3 font-display text-sm font-bold tracking-widest text-primary-foreground shadow-glow transition hover:brightness-110">
-                {installed[step] ? "ACTUALIZAR Y SEGUIR →" : `INSTALAR ${STEPS[step]!.toUpperCase()} →`}
-              </button>
-            </div>
-          ) : step === 5 ? (
-            <TestTrack car={car} />
-          ) : (
-            <GarageCompare store={store}
-              onLoad={(c) => { setCar(c); setInstalled([true, true, true, true, true]); setStep(4); }} />
-          )}
+        <section className="min-w-0 space-y-4">
+          <div className="overflow-hidden border border-border bg-card"><CarStudio3D car={car} installed={installed} focus={STATIONS[station]} /><div className="grid grid-cols-4 border-t border-border bg-card"><Metric label="Potencia" value={installed[1] ? stat.hp : "—"} unit="CV"/><Metric label="Torque" value={installed[1] ? stat.torqueNm : "—"} unit="Nm"/><Metric label="Peso" value={stat.mass} unit="kg"/><Metric label="Relación" value={installed[1] ? stat.hpPerTon : "—"} unit="CV/t"/></div></div>
+          <Guide title={GUIDES[station][0]} text={GUIDES[station][1]} open={guideOpen} onToggle={() => setGuideOpen((v) => !v)} />
         </section>
 
-        <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h2 className="mb-4 font-display text-sm tracking-widest text-muted-foreground">FICHA TÉCNICA</h2>
-            <div className="grid grid-cols-2 gap-3">
-              <Stat label="Potencia" value={installed[1] ? `${s.hp}` : "—"} unit="CV" />
-              <Stat label="Torque" value={installed[1] ? `${s.torqueNm}` : "—"} unit="Nm" />
-              <Stat label="Peso" value={`${s.mass}`} unit="kg" />
-              <Stat label="CV / tonelada" value={installed[1] ? `${s.hpPerTon}` : "—"} unit="" />
-            </div>
-            <ul className="mt-4 space-y-1 text-sm">
-              <Row k="Motor" v={installed[1] ? `${car.layout} ${car.displacement.toFixed(1)}L ${car.aspiration}` : "Sin instalar"} />
-              <Row k="Caja" v={installed[2] ? `${car.gears} vel. ${car.gearbox}` : "Sin instalar"} />
-              <Row k="Tracción" v={installed[2] ? car.drive : "Sin instalar"} />
-              <Row k="Diferencial" v={installed[2] ? car.diff : "Sin instalar"} />
-              <Row k="Chasis" v={installed[3] ? `${car.material}, ${car.tires}` : "Sin instalar"} />
-              <Row k="Suspensión / frenos" v={installed[3] ? `${car.suspension}, ${car.brakes}` : "Sin instalar"} />
-              <Row k="Cx" v={s.cd.toFixed(2)} />
-            </ul>
-          </div>
-          {ready && (
-            <button onClick={() => { if (store.user) void store.add(car); else setStep(6); }}
-              className="w-full rounded-md border border-primary py-3 font-display text-xs font-bold tracking-widest text-primary transition hover:bg-primary/10">
-              {store.user ? `GUARDAR EN EL GARAJE (${saved.length})` : "INICIÁ SESIÓN PARA GUARDAR"}
-            </button>
-          )}
-          {!ready && <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">Instalá los 5 módulos para desbloquear la pista de pruebas.</p>}
+        <aside className="border border-border bg-card">
+          <div className="flex items-center justify-between border-b border-border px-5 py-4"><div><p className="font-mono text-[9px] text-primary">ESTACIÓN {String(station + 1).padStart(2,"0")}</p><h3 className="font-display text-sm font-bold uppercase">{STATIONS[station]}</h3></div><span className="font-mono text-[10px] text-muted-foreground">{installed[station] ? "INSTALADO" : "PENDIENTE"}</span></div>
+          <div className="max-h-[650px] space-y-5 overflow-y-auto p-5"><StationControls station={station} car={car} set={set} chooseCategory={chooseCategory} onAi={(next) => { setCar(next); setInstalled(Array(9).fill(true)); }} /></div>
+          <div className="border-t border-border p-4"><Button onClick={install} className="h-12 w-full rounded-none font-display text-xs font-black tracking-widest">{installed[station] ? "ACTUALIZAR PIEZA" : "INSTALAR PIEZA"}<ChevronRight /></Button></div>
         </aside>
-      </main>
-    </div>
-  );
-}
-
-function BuildPreview({ car, installed }: { car: CarConfig; installed: boolean[] }) {
-  const designed = installed[4];
-  const shown: CarConfig = designed ? car : { ...car, color: "#3a3e46", accent: "#25282e", wheelColor: "#1c1e22", stripes: false, spoiler: false };
-  return (
-    <div className="relative">
-      <CarSvg car={shown} className={`mx-auto w-full max-w-2xl transition ${designed ? "" : "opacity-60"}`} />
-      {!designed && (
-        <span className="absolute left-1/2 top-2 -translate-x-1/2 rounded bg-muted px-3 py-1 font-mono text-xs text-muted-foreground">
-          CHASIS EN CONSTRUCCIÓN
-        </span>
-      )}
-    </div>
-  );
-}
-
-function TestTrack({ car }: { car: CarConfig }) {
-  const [rivalIdx, setRivalIdx] = useState(1);
-  const [res, setRes] = useState<{ me: Result; rival: Result } | null>(null);
-  const [t, setT] = useState(0);
-  const [running, setRunning] = useState(false);
-  const raf = useRef(0);
-  const rival = RIVALS[rivalIdx]!;
-
-  const start = () => {
-    const me = simulate(car), rv = simulate(rival.car);
-    setRes({ me, rival: rv });
-    setRunning(true);
-    const t0 = performance.now();
-    const end = Math.max(me.qmTime ?? 30, rv.qmTime ?? 30) + 0.5;
-    const tick = () => {
-      const now = (performance.now() - t0) / 1000;
-      setT(now);
-      if (now < end) raf.current = requestAnimationFrame(tick);
-      else setRunning(false);
-    };
-    cancelAnimationFrame(raf.current);
-    raf.current = requestAnimationFrame(tick);
-  };
-  useEffect(() => () => cancelAnimationFrame(raf.current), []);
-
-  const at = (r: Result) => r.samples.find((x) => x.t >= t) ?? r.samples[r.samples.length - 1]!;
-  const me = res ? at(res.me) : null;
-  const rv = res ? at(res.rival) : null;
-  const pos = (x: number) => `${Math.min(x / 402, 1) * 82}%`;
-
-  return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-border bg-card p-6">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-display text-lg font-bold">Pista de pruebas · ¼ de milla</h2>
-          <div className="flex gap-2">
-            {RIVALS.map((r, i) => <Pill key={r.name} active={rivalIdx === i} onClick={() => setRivalIdx(i)}>{r.name}</Pill>)}
-          </div>
-        </div>
-        <div className="relative overflow-hidden rounded-lg bg-track">
-          {[car, rival.car].map((c, lane) => {
-            const smp = lane === 0 ? me : rv;
-            return (
-              <div key={lane} className="relative h-28 border-b border-border last:border-0">
-                <div className={`absolute inset-x-0 top-1/2 h-1 road-lines opacity-30`} />
-                <div className="absolute right-[6%] top-0 h-full w-2 bg-[repeating-linear-gradient(0deg,var(--foreground)_0_8px,var(--background)_8px_16px)]" />
-                <div className="absolute bottom-1 w-[18%] transition-none" style={{ left: smp ? pos(smp.x) : "0%" }}>
-                  <CarSvg car={c} spin={running} />
-                </div>
-                <span className="absolute left-2 top-2 font-mono text-[10px] text-muted-foreground">{lane === 0 ? car.name : rival.name}</span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <Stat label="Velocidad" value={me ? me.v.toFixed(0) : "0"} unit="km/h" big />
-          <Stat label="RPM" value={me ? Math.round(me.rpm).toString() : "0"} unit="" big />
-          <Stat label="Marcha" value={me ? `${me.gear}` : "N"} unit="" big />
-        </div>
-        <button onClick={start} disabled={running}
-          className="mt-6 w-full rounded-md bg-primary py-3 font-display text-sm font-bold tracking-widest text-primary-foreground shadow-glow transition hover:brightness-110 disabled:opacity-50">
-          {running ? "CORRIENDO…" : res ? "CORRER DE NUEVO" : "¡LARGAR!"}
-        </button>
       </div>
+    </main>}
 
-      {res && !running && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <ResultCard title={car.name} car={car} r={res.me} win={(res.me.qmTime ?? 99) <= (res.rival.qmTime ?? 99)} />
-          <ResultCard title={rival.name} car={rival.car} r={res.rival} win={(res.rival.qmTime ?? 99) < (res.me.qmTime ?? 99)} />
-        </div>
-      )}
-    </div>
-  );
+    {mode === "track" && <TrackMode car={car} />}
+    {mode === "garage" && <GarageMode store={store} onLoad={(loaded) => { setCar(normalizeCar(loaded)); setInstalled(Array(9).fill(true)); setMode("workshop"); setStation(7); }} />}
+
+    {complete && mode === "workshop" && <div className="fixed bottom-5 left-1/2 z-20 -translate-x-1/2"><Button onClick={() => setMode("track")} size="lg" className="rounded-none shadow-glow"><Flag /> LLEVAR A LA PISTA</Button></div>}
+  </div>;
 }
 
-function ResultCard({ title, r, win, car }: { title: string; r: Result; win: boolean; car: CarConfig }) {
-  const h = handling(car, r);
-  const f = (v: number | null) => (v === null ? "—" : `${v.toFixed(2)} s`);
-  return (
-    <div className={`rounded-xl border bg-card p-5 ${win ? "border-accent" : "border-border"}`}>
-      <div className="mb-3 flex items-center justify-between">
-        <p className="font-display font-bold">{title}</p>
-        {win && <span className="rounded bg-accent px-2 py-0.5 font-display text-[10px] text-accent-foreground">GANADOR</span>}
-      </div>
-      <ul className="space-y-1 text-sm">
-        <Row k="0–100 km/h" v={f(r.t100)} />
-        <Row k="0–200 km/h" v={f(r.t200)} />
-        <Row k="¼ milla" v={`${f(r.qmTime)} @ ${r.qmSpeed?.toFixed(0) ?? "—"} km/h`} />
-        <Row k="Velocidad máxima" v={`${r.topSpeed} km/h`} />
-        <li className="pt-2 font-display text-[11px] tracking-widest text-muted-foreground">MANIOBRABILIDAD</li>
-        <Row k="Agarre lateral" v={`${h.lateralG.toFixed(2)} g`} />
-        <Row k="Frenado 100–0" v={`${h.braking.toFixed(1)} m`} />
-        <Row k="Slalom" v={`${h.slalom.toFixed(1)} km/h`} />
-        <Row k="Vuelta (circuito 3 km)" v={lap(h.lapTime)} />
-        <li className="pt-2"><Bar label="Manejo" value={h.rating} /></li>
-        <Row k="Puntaje de aceleración" v={`${r.score}`} />
-      </ul>
-    </div>
-  );
+type Setter = <K extends keyof CarConfig>(key: K, value: CarConfig[K]) => void;
+function StationControls({ station, car, set, chooseCategory, onAi }: { station: number; car: CarConfig; set: Setter; chooseCategory: (c: Category) => void; onAi: (c: CarConfig) => void }) {
+  const l = LIMITS[car.category];
+  if (station === 0) return <><AiEngineer onBuild={onAi}/><ControlTitle>Clase del proyecto</ControlTitle><Options items={[["deportivo","Deportivo"],["superdeportivo","Superdeportivo"],["carreras","Carreras"]]} value={car.category} onChange={(v) => chooseCategory(v as Category)} /><Field label="Nombre del proyecto"><input value={car.name} maxLength={24} onChange={(e) => set("name", e.target.value)} className="control-input" /></Field></>;
+  if (station === 1) return <><ControlTitle>Arquitectura</ControlTitle><Options items={l.layouts.map((x) => [x,x])} value={car.layout} onChange={(v) => set("layout", v as CarConfig["layout"])} /><Range label="Cilindrada" value={car.displacement} min={l.disp[0]} max={l.disp[1]} step={.1} format={(v) => `${v.toFixed(1)} L`} onChange={(v) => set("displacement",v)}/><ControlTitle>Aspiración</ControlTitle><Options items={[["atmosferico","Atmosférico"],["turbo","Turbo"],["biturbo","Biturbo"],["compresor","Compresor"]]} value={car.aspiration} onChange={(v) => set("aspiration",v as CarConfig["aspiration"])}/>{car.aspiration !== "atmosferico" && <Range label="Presión" value={car.boost} min={0} max={1} step={.05} format={(v) => `${(.4+v*1.2).toFixed(1)} bar`} onChange={(v)=>set("boost",v)}/>}<Range label="Límite de giro" value={car.maxRpm} min={l.rpm[0]} max={l.rpm[1]} step={100} format={(v)=>`${v} rpm`} onChange={(v)=>set("maxRpm",v)}/></>;
+  if (station === 2) return <><ControlTitle>Caja de cambios</ControlTitle><Options items={[["manual","Manual"],["automatica","Automática"],["doble-embrague","Doble embrague"]]} value={car.gearbox} onChange={(v)=>set("gearbox",v as CarConfig["gearbox"])}/><Range label="Marchas" value={car.gears} min={4} max={8} step={1} format={(v)=>`${v}`} onChange={(v)=>set("gears",v)}/><Range label="Relación final" value={car.finalDrive} min={2.5} max={4.6} step={.05} format={(v)=>`${v.toFixed(2)}:1`} onChange={(v)=>set("finalDrive",v)}/><Options items={[["FWD","Delantera"],["RWD","Trasera"],["AWD","Integral"]]} value={car.drive} onChange={(v)=>set("drive",v as CarConfig["drive"])}/><ControlTitle>Diferencial</ControlTitle><Options items={[["abierto","Abierto"],["autoblocante","LSD"],["electronico","Electrónico"]]} value={car.diff} onChange={(v)=>set("diff",v as CarConfig["diff"])}/><div className="grid grid-cols-4 gap-1">{gearRatios(car).map((r,i)=><span key={i} className="bg-muted p-2 text-center font-mono text-[9px]">{i+1}ª<br/>{r.toFixed(2)}</span>)}</div></>;
+  if (station === 3) return <><ControlTitle>Material estructural</ControlTitle><Options items={[["acero","Acero"],["aluminio","Aluminio"],["carbono","Monocasco carbono"]]} value={car.material} onChange={(v)=>set("material",v as CarConfig["material"])}/><InfoBox>El acero es resistente y pesado; el aluminio reduce masa; el carbono ofrece máxima rigidez con el menor peso.</InfoBox></>;
+  if (station === 4) return <><ControlTitle>Puesta a punto</ControlTitle><Options items={[["confort","GT"],["deportiva","Deportiva"],["competicion","Competición"]]} value={car.suspension} onChange={(v)=>set("suspension",v as CarConfig["suspension"])}/><Range label="Altura al suelo" value={car.rideHeight} min={0} max={1} step={.05} format={(v)=>`${Math.round(60+v*120)} mm`} onChange={(v)=>set("rideHeight",v)}/></>;
+  if (station === 5) return <><ControlTitle>Sistema de frenos</ControlTitle><Options items={[["estandar","Acero ventilado"],["deportivos","Deportivo 6 pistones"],["carbono","Carbono-cerámico"]]} value={car.brakes} onChange={(v)=>set("brakes",v as CarConfig["brakes"])}/><InfoBox>El diámetro y material determinan cuánto calor soporta el sistema antes de perder eficacia.</InfoBox></>;
+  if (station === 6) return <><ControlTitle>Neumáticos</ControlTitle><Options items={[["eco","Calle"],["deportivo","Performance"],["semi-slick","Semi-slick"]]} value={car.tires} onChange={(v)=>set("tires",v as CarConfig["tires"])}/><Range label="Diámetro de llanta" value={car.wheelSize} min={17} max={22} step={1} format={(v)=>`${v} pulgadas`} onChange={(v)=>set("wheelSize",v)}/><Options items={[["rayos","5 rayos"],["multirayo","Multirayo"],["disco","Aero"],["malla","Malla"]]} value={car.wheelStyle} onChange={(v)=>set("wheelStyle",v as CarConfig["wheelStyle"])}/><ColorField label="Color de llantas" value={car.wheelColor} onChange={(v)=>set("wheelColor",v)}/></>;
+  if (station === 7) return <><ControlTitle>Arquitectura exterior</ControlTitle><Options items={[["sedan","GT musculoso"],["coupe","Coupé de motor central"],["hiper","Hiperauto"]]} value={car.body} onChange={(v)=>set("body",v as CarConfig["body"])}/><Range label="Perfil del techo" value={car.roof} min={0} max={1} step={.05} format={(v)=>v<.33?"Bajo":v<.66?"Medio":"Alto"} onChange={(v)=>set("roof",v)}/><Range label="Carga aerodinámica" value={car.downforce} min={0} max={1} step={.05} format={(v)=>`${Math.round(v*100)}%`} onChange={(v)=>set("downforce",v)}/><Toggle label="Alerón activo" active={car.spoiler} onClick={()=>set("spoiler",!car.spoiler)}/><Toggle label="Librea de competición" active={car.stripes} onClick={()=>set("stripes",!car.stripes)}/><div className="grid grid-cols-2 gap-3"><ColorField label="Pintura" value={car.color} onChange={(v)=>set("color",v)}/><ColorField label="Detalles" value={car.accent} onChange={(v)=>set("accent",v)}/></div><CarPhoto car={car}/></>;
+  return <><ControlTitle>Cabina</ControlTitle><Options items={[["touring","GT Touring"],["bucket","Butaca deportiva"],["carbono","Baquet carbono"]]} value={car.seatStyle} onChange={(v)=>set("seatStyle",v as CarConfig["seatStyle"])}/><Options items={[["cuero","Cuero"],["alcantara","Alcántara"],["competicion","Competición"]]} value={car.interiorTrim} onChange={(v)=>set("interiorTrim",v as CarConfig["interiorTrim"])}/><ColorField label="Color interior" value={car.interiorColor} onChange={(v)=>set("interiorColor",v)}/><Toggle label="Jaula antivuelco" active={car.rollCage} onClick={()=>set("rollCage",!car.rollCage)}/></>;
 }
 
-function Panel({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
-  return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="font-display text-lg font-bold">{title}</h2>
-        <p className="text-sm text-muted-foreground">{hint}</p>
-      </div>
-      {children}
-    </div>
-  );
-}
-function Group({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <p className="mb-2 text-sm text-muted-foreground">{label}</p>
-      <div className="flex flex-wrap gap-2">{children}</div>
-    </div>
-  );
-}
-function Pill({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button onClick={onClick}
-      className={`rounded-md border px-3 py-1.5 text-sm font-semibold transition ${active ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-primary"}`}>
-      {children}
-    </button>
-  );
-}
-function Choice({ active, onClick, title, desc }: { active: boolean; onClick: () => void; title: string; desc: string }) {
-  return (
-    <button onClick={onClick}
-      className={`rounded-lg border p-4 text-left transition ${active ? "border-primary bg-primary/10 shadow-glow" : "border-border hover:border-primary"}`}>
-      <p className="font-display font-bold">{title}</p>
-      <p className="text-sm text-muted-foreground">{desc}</p>
-    </button>
-  );
-}
-function Range({ label, value, min, max, step, unit, onChange, fmt }: {
-  label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void; fmt?: (v: number) => string;
-}) {
-  return (
-    <label className="block">
-      <div className="mb-1 flex justify-between text-sm">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="font-mono text-primary">{fmt ? fmt(value) : `${step < 1 ? value.toFixed(1) : value} ${unit}`}</span>
-      </div>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full accent-primary" />
-    </label>
-  );
-}
-function Color({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <label className="block">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 h-10 w-full cursor-pointer rounded-md border border-input bg-background" />
-    </label>
-  );
-}
-function Stat({ label, value, unit, big }: { label: string; value: string; unit: string; big?: boolean }) {
-  return (
-    <div className="rounded-lg bg-muted p-3">
-      <p className="text-[11px] uppercase tracking-widest text-muted-foreground">{label}</p>
-      <p className={`font-display font-bold ${big ? "text-3xl" : "text-xl"}`}>{value}<span className="ml-1 text-xs text-muted-foreground">{unit}</span></p>
-    </div>
-  );
-}
-function Row({ k, v }: { k: string; v: string }) {
-  return (
-    <li className="flex justify-between gap-3 border-b border-border/50 py-1 last:border-0">
-      <span className="text-muted-foreground">{k}</span>
-      <span className="text-right font-semibold capitalize">{v}</span>
-    </li>
-  );
+function TrackMode({ car }: { car: CarConfig }) {
+  const [circuit, setCircuit] = useState(0); const [rivalIndex,setRivalIndex]=useState(1); const [result,setResult]=useState<{me:Result;rival:Result}|null>(null); const [time,setTime]=useState(0); const [running,setRunning]=useState(false); const raf=useRef(0); const rival=RIVALS[rivalIndex];
+  const start=()=>{const me=simulate(car),rv=simulate(rival.car);setResult({me,rival:rv});setRunning(true);const began=performance.now();const end=Math.max(me.qmTime??30,rv.qmTime??30)+.5;const tick=()=>{const now=(performance.now()-began)/1000;setTime(now);if(now<end)raf.current=requestAnimationFrame(tick);else setRunning(false)};cancelAnimationFrame(raf.current);raf.current=requestAnimationFrame(tick)};
+  useEffect(()=>()=>cancelAnimationFrame(raf.current),[]); const at=(r:Result)=>r.samples.find(x=>x.t>=time)??r.samples.at(-1)??null; const me=result?at(result.me):null;const rv=result?at(result.rival):null;const h=result?handling(car,result.me):null;const lapTime=h? h.lapTime*(CIRCUITS[circuit].length/3)*CIRCUITS[circuit].factor:null;
+  return <main className="mx-auto max-w-[1500px] space-y-5 px-4 py-6 sm:px-6"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="font-mono text-[10px] text-primary">CENTRO DE PRUEBAS</p><h2 className="font-display text-3xl font-bold">TRACK DAY</h2></div><div className="flex gap-2">{CIRCUITS.map((c,i)=><button key={c.name} onClick={()=>setCircuit(i)} className={`border px-4 py-2 text-left ${circuit===i?"border-primary bg-primary/10":"border-border bg-card"}`}><b className="block font-display text-xs">{c.name}</b><span className="text-[10px] text-muted-foreground">{c.country} · {c.length} km</span></button>)}</div></div><div className="grid gap-4 lg:grid-cols-[1fr_310px]"><section className="overflow-hidden border border-border bg-card"><Race3D car={car} rival={rival.car} me={me} rv={rv} running={running}/><div className="grid grid-cols-3 border-t border-border"><Metric label="Velocidad" value={me?.v.toFixed(0)??0} unit="km/h"/><Metric label="RPM" value={me?Math.round(me.rpm):0} unit=""/><Metric label="Marcha" value={me?.gear??"N"} unit=""/></div></section><aside className="space-y-4"><div className="border border-border bg-card p-5"><p className="font-mono text-[9px] text-primary">CIRCUITO SELECCIONADO</p><h3 className="font-display text-xl font-bold">{CIRCUITS[circuit].name}</h3><p className="mt-1 text-sm text-muted-foreground">{CIRCUITS[circuit].note}</p></div><div className="border border-border bg-card p-5"><ControlTitle>Rival</ControlTitle>{RIVALS.map((r,i)=><button key={r.name} onClick={()=>setRivalIndex(i)} className={`mb-2 w-full border p-3 text-left text-sm ${rivalIndex===i?"border-primary text-primary":"border-border"}`}>{r.name}</button>)}<Button onClick={start} disabled={running} className="mt-3 h-12 w-full rounded-none font-display">{running?"EN PISTA…":"INICIAR PRUEBA"}</Button></div></aside></div>{result&&!running&&<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Result value={result.me.t100?.toFixed(2)??"—"} label="0–100 km/h" unit="s"/><Result value={result.me.topSpeed} label="Velocidad punta" unit="km/h"/><Result value={result.me.qmTime?.toFixed(2)??"—"} label="¼ de milla" unit="s"/><Result value={h?.rating??0} label="Manejo" unit="/100"/><Result value={lapTime?formatLap(lapTime):"—"} label={`Vuelta ${CIRCUITS[circuit].name}`} unit="estimada"/></div>}</main>;
 }
 
-const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, Number.isFinite(v) ? v : a));
-const hex = (v: string, f: string) => (/^#[0-9a-f]{6}$/i.test(v) ? v : f);
+function useSaved(){const {user,ready}=useUser();const[saved,setSaved]=useState<{id:string;car:CarConfig}[]>([]);const[error,setError]=useState<string|null>(null);useEffect(()=>{if(!user){setSaved([]);return}supabase.from("car_builds").select("id, config").order("created_at",{ascending:false}).then(({data,error})=>error?setError("No se pudieron cargar tus autos."):setSaved((data??[]).map(row=>({id:row.id,car:normalizeCar(row.config as Partial<CarConfig>)}))))},[user]);const add=async(car:CarConfig)=>{const{data,error}=await supabase.from("car_builds").insert({config:car as never}).select("id").single();if(error){setError("No se pudo guardar el auto.");return}setSaved(p=>[{id:data.id,car},...p])};const remove=async(id:string)=>{const{error}=await supabase.from("car_builds").delete().eq("id",id);if(error){setError("No se pudo borrar el auto.");return}setSaved(p=>p.filter(x=>x.id!==id))};return{user,ready,saved,error,add,remove}}
+function GarageMode({store,onLoad}:{store:ReturnType<typeof useSaved>;onLoad:(c:CarConfig)=>void}){if(!store.ready)return <main className="p-10 text-center">Cargando hangar…</main>;if(!store.user)return <main className="mx-auto max-w-md px-5 py-12"><AuthPanel/></main>;return <main className="mx-auto max-w-[1400px] px-4 py-7 sm:px-6"><div className="mb-6 flex items-end justify-between"><div><p className="font-mono text-[10px] text-primary">ALMACENAMIENTO EN LA NUBE</p><h2 className="font-display text-3xl font-bold">MI HANGAR</h2></div><Button variant="outline" onClick={()=>supabase.auth.signOut()} className="rounded-none">Cerrar sesión</Button></div>{store.error&&<p className="mb-4 text-destructive">{store.error}</p>}{!store.saved.length?<div className="border border-dashed border-border p-16 text-center text-muted-foreground">Tu hangar está vacío. Terminá un proyecto y guardalo desde el taller.</div>:<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{store.saved.map(item=>{const s=specs(item.car);return <article key={item.id} className="border border-border bg-card"><CarStudio3D car={item.car} installed={Array(9).fill(true)} focus="Hangar"/><div className="p-5"><p className="font-mono text-[9px] uppercase text-primary">{item.car.category}</p><h3 className="font-display text-xl font-bold">{item.car.name}</h3><p className="text-sm text-muted-foreground">{s.hp} CV · {s.mass} kg · {item.car.drive}</p><div className="mt-4 flex gap-2"><Button onClick={()=>onLoad(item.car)} className="rounded-none">Editar</Button><Button variant="outline" onClick={()=>void store.remove(item.id)} className="rounded-none">Eliminar</Button></div></div></article>})}</div>}</main>}
 
-function AiEngineer({ onBuild }: { onBuild: (c: CarConfig) => void }) {
-  const run = useServerFn(aiDesignCar);
-  const [text, setText] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+function AiEngineer({onBuild}:{onBuild:(c:CarConfig)=>void}){const run=useServerFn(aiDesignCar);const[text,setText]=useState("");const[loading,setLoading]=useState(false);const[error,setError]=useState<string|null>(null);const go=async()=>{setLoading(true);setError(null);try{const r=await run({data:{description:text}});if(!r.ok){setError(r.error);return}onBuild(normalizeCar({...r.build,wheelStyle:"rayos",rideHeight:r.build.category==="deportivo"?.35:.12,roof:r.build.body==="hiper"?.25:.45,interiorColor:"#17191d",seatStyle:"carbono",interiorTrim:r.build.category==="carreras"?"competicion":"alcantara",rollCage:r.build.category==="carreras"}))}catch{setError("El ingeniero virtual no respondió. Intentá nuevamente.")}finally{setLoading(false)}};return <div className="border border-primary/40 bg-primary/5 p-4"><div className="mb-2 flex items-center gap-2 text-primary"><Sparkles className="h-4 w-4"/><b className="font-display text-xs">INGENIERO IA</b></div><textarea value={text} onChange={e=>setText(e.target.value)} rows={3} maxLength={800} placeholder="Describí el auto que querés construir…" className="control-input resize-none"/><Button size="sm" onClick={go} disabled={loading||text.trim().length<5} className="mt-2 rounded-none">{loading?"CALCULANDO…":"GENERAR BASE"}</Button>{error&&<p className="mt-2 text-xs text-destructive">{error}</p>}</div>}
 
-  const go = async () => {
-    setLoading(true); setError(null); setNote(null);
-    try {
-      const r = await run({ data: { description: text } });
-      if (!r.ok) { setError(r.error); return; }
-      const b = r.build;
-      const L = LIMITS[b.category];
-      onBuild({
-        name: b.name.slice(0, 24), category: b.category,
-        layout: (L.layouts.includes(b.layout) ? b.layout : L.layouts[0]) as CarConfig["layout"],
-        displacement: Math.round(clamp(b.displacement, L.disp[0], L.disp[1]) * 10) / 10,
-        aspiration: b.aspiration, maxRpm: Math.round(clamp(b.maxRpm, L.rpm[0], L.rpm[1]) / 100) * 100,
-        boost: clamp(b.boost, 0, 1), gearbox: b.gearbox, gears: Math.round(clamp(b.gears, 4, 8)),
-        finalDrive: clamp(b.finalDrive, 2.5, 4.6), drive: b.drive, material: b.material, tires: b.tires,
-        downforce: clamp(b.downforce, 0, 1), body: b.body,
-        color: hex(b.color, "#ff5a1f"), accent: hex(b.accent, "#111318"), wheelColor: hex(b.wheelColor, "#2a2d33"),
-        spoiler: b.spoiler, stripes: b.stripes, wheelSize: Math.round(clamp(b.wheelSize, 15, 22)), wheelStyle: "rayos", diff: b.diff, suspension: b.suspension, brakes: b.brakes, rideHeight: b.category === "normal" ? 0.6 : b.category === "deportivo" ? 0.35 : 0.1, roof: b.body === "hiper" ? 0.3 : 0.5,
-      });
-      setNote(b.explanation);
-    } catch {
-      setError("No se pudo contactar a la IA. Intentá de nuevo.");
-    } finally { setLoading(false); }
-  };
-
-  return (
-    <div className="mb-6 rounded-lg border border-primary/40 bg-primary/5 p-4">
-      <p className="font-display text-sm font-bold tracking-wider text-primary">INGENIERO IA</p>
-      <p className="mb-3 text-sm text-muted-foreground">Describí el auto que querés y la IA arma un motor, transmisión y piezas compatibles. Después podés ajustar todo.</p>
-      <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={800} rows={3}
-        placeholder="Ej: un deportivo japonés liviano, tracción trasera, ideal para curvas, color azul"
-        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
-      <button onClick={go} disabled={loading || text.trim().length < 5}
-        className="mt-2 rounded-md bg-primary px-4 py-2 font-display text-xs font-bold tracking-widest text-primary-foreground transition hover:brightness-110 disabled:opacity-50">
-        {loading ? "DISEÑANDO…" : "GENERAR CON IA"}
-      </button>
-      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
-      {note && <p className="mt-3 rounded-md bg-muted p-3 text-sm">✓ {note} <span className="text-muted-foreground">Revisá cada paso o andá directo a la prueba.</span></p>}
-    </div>
-  );
-}
-
-const lap = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, "0")}`;
-
-function Bar({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <div className="mb-1 flex justify-between text-xs"><span className="text-muted-foreground">{label}</span><span className="font-mono">{value}/100</span></div>
-      <div className="h-2 overflow-hidden rounded bg-background"><div className="h-full bg-primary" style={{ width: `${value}%` }} /></div>
-    </div>
-  );
-}
-
-type SavedBuild = { id: string; car: CarConfig };
-
-function useSaved() {
-  const { user, ready } = useUser();
-  const [saved, setSavedState] = useState<SavedBuild[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!user) { setSavedState([]); return; }
-    supabase.from("car_builds").select("id, config").order("created_at").then(({ data, error }) => {
-      if (error) setError("No se pudieron cargar tus autos.");
-      else setSavedState((data ?? []).map((r) => ({ id: r.id, car: r.config as unknown as CarConfig })));
-    });
-  }, [user]);
-  const add = async (car: CarConfig) => {
-    const { data, error } = await supabase.from("car_builds").insert({ config: car as never }).select("id").single();
-    if (error) { setError("No se pudo guardar el auto."); return; }
-    setSavedState((p) => [...p, { id: data.id, car }]);
-  };
-  const remove = async (id: string) => {
-    const { error } = await supabase.from("car_builds").delete().eq("id", id);
-    if (error) { setError("No se pudo borrar el auto."); return; }
-    setSavedState((p) => p.filter((x) => x.id !== id));
-  };
-  return { saved, add, remove, user, ready, error };
-}
-
-function GarageCompare({ store, onLoad }: { store: ReturnType<typeof useSaved>; onLoad: (c: CarConfig) => void }) {
-  const { saved, remove, user, ready, error } = store;
-  const [sel, setSel] = useState<string[]>([]);
-  const rows = useMemo(() => saved.filter((b) => sel.includes(b.id)).map((b) => {
-    const s = specs(b.car), r = simulate(b.car), h = handling(b.car, r);
-    return { b, s, r, h };
-  }), [saved, sel]);
-  const toggle = (id: string) => setSel((p) => (p.includes(id) ? p.filter((x) => x !== id) : p.length >= 4 ? p : [...p, id]));
-  const sec = (v: number | null) => (v === null ? "—" : `${v.toFixed(2)} s`);
-  const metrics: { k: string; v: (x: (typeof rows)[number]) => string; best?: (x: (typeof rows)[number]) => number }[] = [
-    { k: "Motor", v: (x) => `${x.b.car.layout} ${x.b.car.displacement.toFixed(1)}L ${x.b.car.aspiration}` },
-    { k: "Transmisión", v: (x) => `${x.b.car.gears} vel. ${x.b.car.gearbox} · ${x.b.car.drive}` },
-    { k: "Potencia", v: (x) => `${x.s.hp} CV`, best: (x) => x.s.hp },
-    { k: "Torque", v: (x) => `${x.s.torqueNm} Nm`, best: (x) => x.s.torqueNm },
-    { k: "Peso", v: (x) => `${x.s.mass} kg`, best: (x) => -x.s.mass },
-    { k: "CV / tonelada", v: (x) => `${x.s.hpPerTon}`, best: (x) => x.s.hpPerTon },
-    { k: "0–100 km/h", v: (x) => sec(x.r.t100), best: (x) => -(x.r.t100 ?? 99) },
-    { k: "¼ milla", v: (x) => sec(x.r.qmTime), best: (x) => -(x.r.qmTime ?? 99) },
-    { k: "Vel. máxima", v: (x) => `${x.r.topSpeed} km/h`, best: (x) => x.r.topSpeed },
-    { k: "Agarre lateral", v: (x) => `${x.h.lateralG.toFixed(2)} g`, best: (x) => x.h.lateralG },
-    { k: "Frenado 100–0", v: (x) => `${x.h.braking.toFixed(1)} m`, best: (x) => -x.h.braking },
-    { k: "Vuelta 3 km", v: (x) => lap(x.h.lapTime), best: (x) => -x.h.lapTime },
-  ];
-
-  if (!ready) return <p className="text-muted-foreground">Cargando…</p>;
-  if (!user) return <AuthPanel />;
-  if (!saved.length) return (
-    <div className="rounded-xl border border-dashed border-border p-10 text-center text-muted-foreground">
-      Tu garaje está vacío. Terminá un auto y tocá <b className="text-foreground">Guardar en el garaje</b>.
-    </div>
-  );
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>Garaje de {user.email}</span>
-        <button onClick={() => supabase.auth.signOut()} className="text-primary">Cerrar sesión</button>
-      </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      <div className="grid gap-3 sm:grid-cols-2">
-        {saved.map((b) => (
-          <div key={b.id} className={`rounded-xl border bg-card p-4 ${sel.includes(b.id) ? "border-primary" : "border-border"}`}>
-            <CarSvg car={b.car} className="w-full" />
-            <p className="font-display font-bold">{b.car.name}</p>
-            <p className="text-xs capitalize text-muted-foreground">{b.car.category} · {specs(b.car).hp} CV</p>
-            <div className="mt-3 flex gap-2">
-              <Pill active={sel.includes(b.id)} onClick={() => toggle(b.id)}>{sel.includes(b.id) ? "Comparando" : "Comparar"}</Pill>
-              <Pill active={false} onClick={() => onLoad(b.car)}>Editar</Pill>
-              <Pill active={false} onClick={() => { void remove(b.id); setSel((p) => p.filter((x) => x !== b.id)); }}>Borrar</Pill>
-            </div>
-          </div>
-        ))}
-      </div>
-      {rows.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card p-4">
-          <h2 className="mb-3 font-display text-lg font-bold">Comparación</h2>
-          <table className="w-full text-sm">
-            <thead>
-              <tr><th className="p-2 text-left text-muted-foreground" />{rows.map((x) => <th key={x.b.id} className="p-2 text-left font-display">{x.b.car.name}</th>)}</tr>
-            </thead>
-            <tbody>
-              {metrics.map((m) => {
-                const top = m.best && rows.length > 1 ? Math.max(...rows.map(m.best)) : null;
-                return (
-                  <tr key={m.k} className="border-t border-border/50">
-                    <td className="p-2 text-muted-foreground">{m.k}</td>
-                    {rows.map((x) => (
-                      <td key={x.b.id} className={`p-2 capitalize ${top !== null && m.best!(x) === top ? "font-bold text-accent" : ""}`}>{m.v(x)}</td>
-                    ))}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          <p className="mt-2 text-xs text-muted-foreground">En amarillo: el mejor de cada categoría. Podés comparar hasta 4 autos.</p>
-        </div>
-      )}
-    </div>
-  );
-}
+function TopButton({active,disabled,onClick,icon,children}:{active:boolean;disabled?:boolean;onClick:()=>void;icon:ReactNode;children:ReactNode}){return <Button variant={active?"default":"ghost"} disabled={disabled} onClick={onClick} className="rounded-none px-3 text-xs [&_svg]:h-4 [&_svg]:w-4">{icon}<span className="hidden sm:inline">{children}</span></Button>}
+function Guide({title,text,open,onToggle}:{title:string;text:string;open:boolean;onToggle:()=>void}){return <div className="border border-border bg-card"><button onClick={onToggle} className="flex w-full items-center gap-3 p-4 text-left"><BookOpen className="h-4 w-4 text-primary"/><div><p className="font-mono text-[9px] text-primary">ACADEMIA GARAGE LAB</p><b className="font-display text-xs">¿PARA QUÉ SIRVE {title.toUpperCase()}?</b></div><Info className="ml-auto h-4 w-4 text-muted-foreground"/></button>{open&&<p className="border-t border-border px-5 py-4 text-sm leading-relaxed text-muted-foreground">{text}</p>}</div>}
+function Metric({label,value,unit}:{label:string;value:string|number;unit:string}){return <div className="border-r border-border p-3 last:border-0"><p className="font-mono text-[8px] uppercase text-muted-foreground">{label}</p><p className="font-display text-lg font-bold">{value}<span className="ml-1 text-[9px] text-muted-foreground">{unit}</span></p></div>}
+function Result({value,label,unit}:{value:string|number;label:string;unit:string}){return <div className="border border-border bg-card p-5"><p className="font-display text-2xl font-bold text-primary">{value}<span className="ml-1 text-xs">{unit}</span></p><p className="text-xs text-muted-foreground">{label}</p></div>}
+function ControlTitle({children}:{children:ReactNode}){return <p className="font-display text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{children}</p>}
+function Options({items,value,onChange}:{items:readonly (readonly [string,string])[];value:string;onChange:(v:string)=>void}){return <div className="grid grid-cols-2 gap-2">{items.map(([key,label])=><Button key={key} type="button" variant={value===key?"default":"outline"} onClick={()=>onChange(key)} className="h-auto min-h-10 rounded-none whitespace-normal px-2 text-[11px]">{label}</Button>)}</div>}
+function Field({label,children}:{label:string;children:ReactNode}){return <label className="block"><span className="mb-1 block text-xs text-muted-foreground">{label}</span>{children}</label>}
+function Range({label,value,min,max,step,format,onChange}:{label:string;value:number;min:number;max:number;step:number;format:(v:number)=>string;onChange:(v:number)=>void}){return <label className="block"><span className="mb-2 flex justify-between text-xs text-muted-foreground"><span>{label}</span><b className="font-mono text-primary">{format(value)}</b></span><input type="range" value={value} min={min} max={max} step={step} onChange={e=>onChange(Number(e.target.value))} className="w-full accent-primary"/></label>}
+function ColorField({label,value,onChange}:{label:string;value:string;onChange:(v:string)=>void}){return <label className="block text-xs text-muted-foreground">{label}<span className="mt-1 flex h-10 items-center gap-2 border border-border px-2"><input type="color" value={value} onChange={e=>onChange(e.target.value)} className="h-6 w-8 cursor-pointer border-0 bg-transparent"/><span className="font-mono text-[10px]">{value}</span></span></label>}
+function Toggle({label,active,onClick}:{label:string;active:boolean;onClick:()=>void}){return <Button type="button" variant={active?"default":"outline"} onClick={onClick} className="w-full justify-between rounded-none">{label}{active?<Check/>:<span className="h-4 w-4 border border-current"/>}</Button>}
+function InfoBox({children}:{children:ReactNode}){return <p className="border-l-2 border-primary bg-muted p-3 text-xs leading-relaxed text-muted-foreground">{children}</p>}
+const clamp=(v:number,min:number,max:number)=>Math.min(max,Math.max(min,v));const formatLap=(seconds:number)=>`${Math.floor(seconds/60)}:${(seconds%60).toFixed(2).padStart(5,"0")}`;

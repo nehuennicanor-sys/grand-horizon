@@ -3,11 +3,14 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Environment, Lightformer, OrbitControls, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { CarConfig, Sample } from "@/lib/car";
+import sedanAsset from "@/assets/models/sedan-sports.glb.asset.json";
+import raceAsset from "@/assets/models/race.glb.asset.json";
+import futureAsset from "@/assets/models/race-future.glb.asset.json";
 
 const MODEL: Record<CarConfig["body"], string> = {
-  sedan: "/models/sedan-sports.glb",
-  coupe: "/models/race.glb",
-  hiper: "/models/race-future.glb",
+  sedan: sedanAsset.url,
+  coupe: raceAsset.url,
+  hiper: futureAsset.url,
 };
 
 function Wheel({ x, z, car, moving = false }: { x: number; z: number; car: CarConfig; moving?: boolean }) {
@@ -67,13 +70,13 @@ function Vehicle({ car, installed, focus, moving = false }: { car: CarConfig; in
   useEffect(() => () => {
     model.traverse((node) => { if (node instanceof THREE.Mesh && node.name === "body") (node.material as THREE.Material).dispose(); });
   }, [model]);
-  const mounted = installed[1] || focus === "Carrocería" || moving;
+  const mounted = installed[7] || focus === "Carrocería" || moving;
   const lifted = (car.rideHeight - 0.5) * 0.16;
   return <group scale={1.62}>
     {/* Visible frame before the body is installed */}
     <mesh position={[0, 0.3 + lifted, 0]} castShadow><boxGeometry args={[0.77, 0.12, 2.12]} /><meshStandardMaterial color="#4b5155" metalness={0.72} roughness={0.33} /></mesh>
     {installed[3] && <group><mesh position={[0, 0.32, -0.7]} rotation-z={Math.PI / 2}><cylinderGeometry args={[0.04, 0.04, 0.84, 12]} /><meshStandardMaterial color="#a9b0b5" metalness={0.95} roughness={0.2} /></mesh><mesh position={[0, 0.32, 0.66]} rotation-z={Math.PI / 2}><cylinderGeometry args={[0.04, 0.04, 0.84, 12]} /><meshStandardMaterial color="#a9b0b5" metalness={0.95} roughness={0.2} /></mesh></group>}
-    {installed[2] && <Engine car={car} />}
+    {installed[1] && <Engine car={car} />}
     {mounted && <group position-y={lifted} scale-y={0.92 + car.roof * 0.16}><primitive object={model} /></group>}
     {[-0.37, 0.37].flatMap((x) => [-0.7, 0.66].map((z) => <Wheel key={`${x}-${z}`} x={x} z={z} car={car} moving={moving} />))}
     {installed[7] && car.spoiler && car.body !== "sedan" && <group position={[0, 0.97 + lifted, -1.06]}><mesh castShadow><boxGeometry args={[1.2, 0.045, 0.24]} /><meshStandardMaterial color={car.accent} metalness={0.65} roughness={0.3} /></mesh><mesh position={[-0.37, -0.13, 0]}><boxGeometry args={[0.04, 0.25, 0.05]} /><meshStandardMaterial color="#34383b" /></mesh><mesh position={[0.37, -0.13, 0]}><boxGeometry args={[0.04, 0.25, 0.05]} /><meshStandardMaterial color="#34383b" /></mesh></group>}
