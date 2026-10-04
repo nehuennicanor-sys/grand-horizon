@@ -93,8 +93,8 @@ function GarageGame() {
         </aside>
 
         <section className="min-w-0 space-y-4">
-          <div className="overflow-hidden border border-border bg-card"><CarStudio3D car={car} installed={installed} focus={STATIONS[station]} /><div className="grid grid-cols-4 border-t border-border bg-card"><Metric label="Potencia" value={installed[1] ? stat.hp : "—"} unit="CV"/><Metric label="Torque" value={installed[1] ? stat.torqueNm : "—"} unit="Nm"/><Metric label="Peso" value={stat.mass} unit="kg"/><Metric label="Relación" value={installed[1] ? stat.hpPerTon : "—"} unit="CV/t"/></div></div>
-          <Guide title={GUIDES[station][0]} text={GUIDES[station][1]} open={guideOpen} onToggle={() => setGuideOpen((v) => !v)} />
+          <div className="overflow-hidden border border-border bg-card"><CarStudio3D car={car} installed={installed} focus={STATIONS[station] ?? "Proyecto"} /><div className="grid grid-cols-4 border-t border-border bg-card"><Metric label="Potencia" value={installed[1] ? stat.hp : "—"} unit="CV"/><Metric label="Torque" value={installed[1] ? stat.torqueNm : "—"} unit="Nm"/><Metric label="Peso" value={stat.mass} unit="kg"/><Metric label="Relación" value={installed[1] ? stat.hpPerTon : "—"} unit="CV/t"/></div></div>
+          <Guide title={GUIDES[station]?.[0] ?? ""} text={GUIDES[station]?.[1] ?? ""} open={guideOpen} onToggle={() => setGuideOpen((v) => !v)} />
         </section>
 
         <aside className="border border-border bg-card">
