@@ -1,201 +1,161 @@
-import { Suspense, useEffect, useMemo, useRef } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { ContactShadows, Environment, Lightformer, OrbitControls, useGLTF } from "@react-three/drei";
-import * as THREE from "three";
-import type { CarConfig, Sample } from "@/lib/car";
-import toyCarAsset from "@/assets/models/toy-car.glb.asset.json";
+import { Suspense, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Environment, Html, Lightformer, OrbitControls, useGLTF } from '@react-three/drei';
+import * as THREE from 'three';
+import { Pause, Play, RotateCcw, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { specs, simulate, type CarConfig, type Sample } from '@/lib/car';
+import { normalizeVehicle, disposeVehicle } from '@/lib/vehicle-model';
+import { driveSetup, newDriveState, stepDrive } from '@/lib/driving';
+import toyCarAsset from '@/assets/models/toy-car.glb.asset.json';
 
-const BODY_TRANSFORM: Record<CarConfig["body"], [number, number, number]> = {
-  sedan: [1, 1.02, 1.02],
-  coupe: [0.98, 0.94, 0.98],
-  hiper: [0.96, 0.88, 0.96],
-};
-
-function useCarModel(car: CarConfig) {
-  const { scene } = useGLTF(toyCarAsset.url);
-  return useMemo(() => {
-    const clone = scene.clone(true);
-    // Normalizar: el modelo fuente viene en centímetros con escala 0.0001
-    const box = new THREE.Box3().setFromObject(clone);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    const k = 4.3 / Math.max(size.x, size.z);
-    const wrapper = new THREE.Group();
-    clone.scale.multiplyScalar(k);
-    clone.position.set(-center.x * k, -box.min.y * k, -center.z * k);
-    wrapper.add(clone);
-    wrapper.traverse((node) => {
+function palette() {
+  const css = getComputedStyle(document.documentElement);
+  return Object.fromEntries(['studio','floor','metal','rubber','glass','sky','grass','asphalt','line','curb','warm','cool','shadow'].map(name => [name, css.getPropertyValue(`--scene-${name}`).trim()]));
+}
+function Model({ source, car }: { source: THREE.Group; car: CarConfig }) {
+  const object = useMemo(() => normalizeVehicle(source), [source]);
+  useEffect(() => () => disposeVehicle(object), [object]);
+  useEffect(() => {
+    object.traverse(node => {
       if (!(node instanceof THREE.Mesh)) return;
-      node.castShadow = true;
-      node.receiveShadow = true;
-      const source = (Array.isArray(node.material) ? node.material[0] : node.material) as THREE.MeshStandardMaterial;
-      const mat = new THREE.MeshPhysicalMaterial({
-        color: source.color ? source.color.clone() : new THREE.Color("#888888"),
-        metalness: source.metalness ?? 0.4,
-        roughness: source.roughness ?? 0.4,
-        map: source.map ?? null,
-      });
-      if (node.name === "ToyCar") {
-        // Carrocería: pintura con clearcoat teñida con el color elegido
-        mat.color = new THREE.Color(car.color);
-        mat.metalness = 0.55;
-        mat.roughness = 0.24;
-        mat.clearcoat = 1;
-        mat.clearcoatRoughness = 0.08;
-        mat.envMapIntensity = 1.4;
+      for (const mat of Array.isArray(node.material) ? node.material : [node.material]) {
+        if (mat instanceof THREE.MeshStandardMaterial && mat.userData.paint) mat.color.set(car.color);
       }
-      if (node.name === "Glass") {
-        mat.transparent = true;
-        mat.opacity = 0.55;
-        mat.color = new THREE.Color("#0e1418");
-        mat.metalness = 0.9;
-        mat.roughness = 0.05;
-        mat.envMapIntensity = 1.6;
-      }
-      node.material = mat;
     });
-    return wrapper;
-  }, [scene, car.color]);
+  }, [object, car.color]);
+  return <primitive object={object} dispose={null} />;
 }
+function DefaultModel({ car }: { car: CarConfig }) { const { scene } = useGLTF(toyCarAsset.url); return <Model source={scene} car={car} />; }
+function Loader() { return <Html center><span className="bg-background/80 px-3 py-2 font-mono text-xs text-foreground">Cargando auto…</span></Html>; }
 
-function Wheel({ x, z, car, moving = false }: { x: number; z: number; car: CarConfig; moving?: boolean }) {
-  const spin = useRef<THREE.Group>(null);
-  useFrame((_, raw) => {
-    if (spin.current && moving) spin.current.rotation.x -= Math.min(raw, 0.05) * 13;
-  });
-  const spokes = car.wheelStyle === "disco" ? 0 : car.wheelStyle === "malla" ? 12 : car.wheelStyle === "multirayo" ? 10 : 5;
-  const radius = 0.28 + (car.wheelSize - 15) * 0.008;
-  return <group position={[x, radius, z]} ref={spin}>
-    <mesh rotation-z={Math.PI / 2} castShadow><cylinderGeometry args={[radius, radius, 0.19, 48]} /><meshStandardMaterial color="#101215" roughness={0.9} /></mesh>
-    <mesh position={[x > 0 ? 0.11 : -0.11, 0, 0]} rotation-z={Math.PI / 2}>
-      <cylinderGeometry args={[radius * 0.72, radius * 0.72, 0.012, 48]} />
-      <meshStandardMaterial color={car.wheelColor} metalness={0.9} roughness={0.18} />
-    </mesh>
-    {spokes > 0 && Array.from({ length: spokes }, (_, i) => <mesh key={i} position={[x > 0 ? 0.122 : -0.122, 0, 0]} rotation-x={i * Math.PI / spokes}>
-      <boxGeometry args={[0.018, radius * 1.33, spokes > 8 ? 0.016 : 0.034]} />
-      <meshStandardMaterial color={car.wheelColor} metalness={0.95} roughness={0.15} />
-    </mesh>)}
-    <mesh position={[x > 0 ? 0.14 : -0.14, 0, 0]} rotation-z={Math.PI / 2}><cylinderGeometry args={[0.052, 0.052, 0.024, 24]} /><meshStandardMaterial color="#c8ced2" metalness={0.95} roughness={0.12} /></mesh>
-  </group>;
-}
-
-function Engine({ car }: { car: CarConfig }) {
-  const rows = car.layout.startsWith("V") || car.layout === "W16" ? 2 : 1;
-  const count = Math.ceil(({ I3: 3, I4: 4, I6: 6, V6: 6, V8: 8, V10: 10, V12: 12, W16: 16 })[car.layout] / rows);
-  return <group position={[0, 0.62, 0.55]}>
-    <mesh castShadow><boxGeometry args={[0.65, 0.3, 0.62]} /><meshStandardMaterial color="#3a4045" metalness={0.9} roughness={0.25} /></mesh>
-    {Array.from({ length: Math.min(count, 8) }, (_, i) => Array.from({ length: rows }, (_, j) => <mesh key={`${i}-${j}`} position={[(j - (rows - 1) / 2) * 0.32, 0.22, (i - (count - 1) / 2) * 0.085]} castShadow>
-      <cylinderGeometry args={[0.07, 0.08, 0.22, 16]} /><meshStandardMaterial color="#98a1a8" metalness={0.95} roughness={0.18} />
-    </mesh>))}
-    <mesh position={[0, 0.4, 0]}><boxGeometry args={[0.48, 0.055, 0.57]} /><meshStandardMaterial color={car.accent} metalness={0.7} roughness={0.28} /></mesh>
-  </group>;
-}
-
-function Vehicle({ car, installed, focus, moving = false }: { car: CarConfig; installed: boolean[]; focus: string; moving?: boolean }) {
-  const model = useCarModel(car);
-  useEffect(() => () => {
-    model.traverse((node) => { if (node instanceof THREE.Mesh) (node.material as THREE.Material).dispose(); });
-  }, [model]);
-  const mounted = installed[7] || focus === "Carrocería" || moving;
-  const lifted = (car.rideHeight - 0.5) * 0.16;
-  const body = BODY_TRANSFORM[car.body];
-  return <group scale={1.62}>
-    {/* Bastidor visible antes de montar la carrocería */}
-    {!mounted && <mesh position={[0, 0.3 + lifted, 0]} castShadow><boxGeometry args={[0.77, 0.12, 2.12]} /><meshStandardMaterial color="#4b5155" metalness={0.72} roughness={0.33} /></mesh>}
-    {installed[3] && !mounted && <group><mesh position={[0, 0.32, -0.7]} rotation-z={Math.PI / 2}><cylinderGeometry args={[0.04, 0.04, 0.84, 12]} /><meshStandardMaterial color="#a9b0b5" metalness={0.95} roughness={0.2} /></mesh><mesh position={[0, 0.32, 0.66]} rotation-z={Math.PI / 2}><cylinderGeometry args={[0.04, 0.04, 0.84, 12]} /><meshStandardMaterial color="#a9b0b5" metalness={0.95} roughness={0.2} /></mesh></group>}
-    {installed[1] && !mounted && <Engine car={car} />}
-    {mounted
-      ? <group position-y={lifted} scale={body} position-x={-0.02}><primitive object={model} /></group>
-      : [-0.37, 0.37].flatMap((x) => [-0.7, 0.66].map((z) => <Wheel key={`${x}-${z}`} x={x} z={z} car={car} moving={moving} />))}
-    {mounted && car.spoiler && <group position={[0, 0.78 + lifted, -1.02]}><mesh castShadow><boxGeometry args={[1.15, 0.04, 0.22]} /><meshPhysicalMaterial color={car.accent} metalness={0.7} roughness={0.25} clearcoat={0.8} /></mesh><mesh position={[-0.34, -0.12, 0]}><boxGeometry args={[0.035, 0.24, 0.05]} /><meshStandardMaterial color="#2c3033" metalness={0.6} /></mesh><mesh position={[0.34, -0.12, 0]}><boxGeometry args={[0.035, 0.24, 0.05]} /><meshStandardMaterial color="#2c3033" metalness={0.6} /></mesh></group>}
-  </group>;
-}
-
-function StudioFloor() {
+function Shadow() {
+  const colors = useMemo(palette, []);
   const texture = useMemo(() => {
-    const canvas = document.createElement("canvas"); canvas.width = canvas.height = 256;
-    const ctx = canvas.getContext("2d");
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
+    const ctx = canvas.getContext('2d');
     if (ctx) {
-      ctx.fillStyle = "#23272a"; ctx.fillRect(0, 0, 256, 256);
-      for (let i = 0; i < 4000; i++) {
-        const v = Math.round(30 + ((i * 37) % 22)); ctx.fillStyle = `rgb(${v},${v + 2},${v + 4})`;
-        ctx.fillRect((i * 73) % 256, (i * 41) % 256, 1, 1);
-      }
-      ctx.strokeStyle = "#31373b"; ctx.lineWidth = 3; ctx.strokeRect(1, 1, 254, 254);
+      const g = ctx.createRadialGradient(64,64,10,64,64,62);
+      g.addColorStop(0,colors.shadow); g.addColorStop(.45,colors.shadow); g.addColorStop(1,'transparent');
+      ctx.fillStyle = g; ctx.fillRect(0,0,128,128);
     }
-    const t = new THREE.CanvasTexture(canvas); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(12, 12); return t;
-  }, []);
+    return new THREE.CanvasTexture(canvas);
+  }, [colors]);
   useEffect(() => () => texture.dispose(), [texture]);
-  return <mesh rotation-x={-Math.PI / 2} position-y={-0.018} receiveShadow><planeGeometry args={[40, 40]} /><meshStandardMaterial map={texture} roughness={0.42} metalness={0.35} envMapIntensity={0.7} /></mesh>;
+  return <mesh rotation-x={-Math.PI/2} position-y={.009}><planeGeometry args={[2.8,5.1]}/><meshBasicMaterial map={texture} transparent opacity={.7} depthWrite={false} toneMapped={false}/></mesh>;
 }
-
-function StudioLights() {
+function Wheel({ x, z, car }: { x: number; z: number; car: CarConfig }) {
+  const colors = useMemo(palette, []);
+  const count = car.wheelStyle === 'malla' ? 12 : car.wheelStyle === 'multirayo' ? 10 : car.wheelStyle === 'disco' ? 0 : 5;
+  const radius = .28 + (car.wheelSize - 15) * .01;
+  return <group position={[x,radius,z]}>
+    <mesh rotation-z={Math.PI/2}><cylinderGeometry args={[radius,radius,.19,32]}/><meshStandardMaterial color={colors.rubber} roughness={.9}/></mesh>
+    <group position-x={Math.sign(x)*.105}>
+      <mesh rotation-z={Math.PI/2}><cylinderGeometry args={[radius*.73,radius*.73,.015,32]}/><meshStandardMaterial color={count ? colors.glass : car.wheelColor} metalness={.9} roughness={.15}/></mesh>
+      {Array.from({length:count},(_,i)=><mesh key={i} rotation-x={i*Math.PI/count}><boxGeometry args={[.025,radius*1.4,.033]}/><meshStandardMaterial color={car.wheelColor} metalness={.9} roughness={.1}/></mesh>)}
+      <mesh rotation-z={Math.PI/2}><cylinderGeometry args={[.06,.06,.035,16]}/><meshStandardMaterial color={car.wheelColor} metalness={.9} roughness={.1}/></mesh>
+    </group>
+  </group>;
+}
+function Vehicle({ car, installed, focus, model }: { car: CarConfig; installed: boolean[]; focus: string; model?: THREE.Group | null }) {
+  const colors = useMemo(palette, []);
+  const mounted = installed[7] || focus === 'Carrocería' || focus === 'Ruedas' || focus === 'Prueba' || !!model;
+  return <group>
+    <Shadow/>
+    {mounted ? <group position-y={car.rideHeight*.1} scale={[car.body==='hiper'?.97:1,.92+car.roof*.18,1]}><Suspense fallback={<Loader/>}>{model ? <Model source={model} car={car}/> : <DefaultModel car={car}/>}</Suspense></group> : <>
+      <mesh position={[0,.32,0]}><boxGeometry args={[1.3,.14,3.6]}/><meshStandardMaterial color={colors.metal} metalness={.8} roughness={.32}/></mesh>
+      {installed[1] && <group position={[0,.58,.85]}><mesh><boxGeometry args={[.75,.4,.9]}/><meshStandardMaterial color={colors.metal} metalness={.9} roughness={.2}/></mesh>{Array.from({length:8},(_,i)=><mesh key={i} position={[(i%2-.5)*.48,.27,(Math.floor(i/2)-1.5)*.18]}><cylinderGeometry args={[.09,.1,.24,12]}/><meshStandardMaterial color={car.accent} metalness={.8} roughness={.24}/></mesh>)}</group>}
+    </>}
+    {(!model || !mounted) && [-.9,.9].flatMap(x=>[-1.24,1.22].map(z=><Wheel key={`${x}-${z}`} x={x} z={z} car={car}/>))}
+    {mounted && car.spoiler && <group position={[0,1.03,-1.65]}><mesh><boxGeometry args={[1.7,.05,.32]}/><meshStandardMaterial color={car.accent} metalness={.9} roughness={.1}/></mesh>{[-.55,.55].map(x=><mesh key={x} position={[x,-.19,0]}><boxGeometry args={[.035,.38,.09]}/><meshStandardMaterial color={colors.metal} metalness={.8} roughness={.3}/></mesh>)}</group>}
+  </group>;
+}
+function Lighting({ outdoor=false }: { outdoor?: boolean }) {
+  const c = useMemo(palette, []);
   return <>
-    <color attach="background" args={["#14181b"]} />
-    <fog attach="fog" args={["#14181b", 14, 34]} />
-    <hemisphereLight args={["#dfe9f0", "#23262a", 1.1]} />
-    <spotLight position={[5, 9, 4]} angle={0.5} penumbra={0.7} intensity={220} color="#fff4e0" castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-bias={-0.0002} />
-    <spotLight position={[-6, 7, -3]} angle={0.6} penumbra={0.9} intensity={90} color="#bcd6ff" />
-    <directionalLight position={[0, 6, -8]} intensity={0.8} color="#8fb4d8" />
-    <Environment resolution={256}>
-      <Lightformer intensity={4} position={[0, 6, 0]} rotation-x={Math.PI / 2} scale={[12, 12, 1]} color="#fff6e8" />
-      <Lightformer intensity={2.5} position={[-6, 2, 0]} rotation-y={Math.PI / 2} scale={[10, 2, 1]} color="#cfe4ff" />
-      <Lightformer intensity={2} position={[6, 2, 0]} rotation-y={-Math.PI / 2} scale={[10, 2, 1]} color="#ffe9c8" />
-      <Lightformer intensity={1.2} position={[0, 2, -7]} scale={[12, 2, 1]} color="#9fb8cc" />
+    <color attach="background" args={[outdoor?c.sky:c.studio]}/>
+    <fog attach="fog" args={[outdoor?c.sky:c.studio,outdoor?150:18,outdoor?650:50]}/>
+    <hemisphereLight args={[c.cool,c.floor,1.4]}/>
+    <directionalLight position={[8,12,6]} color={c.warm} intensity={outdoor?2:1.5}/>
+    {/* One-time low resolution cubemap capture, not a per-frame environment render. */}
+    <Environment resolution={128} frames={1}>
+      <Lightformer intensity={3} position={[0,5,0]} rotation-x={Math.PI/2} scale={[10,8,1]} color={c.warm}/>
+      <Lightformer intensity={2} position={[-5,2,0]} rotation-y={Math.PI/2} scale={[8,2,1]} color={c.cool}/>
+      <Lightformer intensity={2} position={[5,2,0]} rotation-y={-Math.PI/2} scale={[8,2,1]} color={c.warm}/>
     </Environment>
   </>;
 }
-
-function Stage({ car, installed, focus }: { car: CarConfig; installed: boolean[]; focus: string }) {
-  return <>
-    <StudioLights />
-    <StudioFloor />
-    <mesh position={[0, -0.12, 0]} receiveShadow><cylinderGeometry args={[3.1, 3.15, 0.22, 96]} /><meshStandardMaterial color="#15191c" metalness={0.7} roughness={0.3} envMapIntensity={0.9} /></mesh>
-    <mesh position={[0, -0.02, 0]}><torusGeometry args={[3, 0.014, 8, 128]} /><meshBasicMaterial color="#d6a558" /></mesh>
-    <ContactShadows position={[0, 0.005, 0]} opacity={0.75} scale={9} blur={2.2} far={3} resolution={512} color="#000000" />
-    <Suspense fallback={null}><Vehicle car={car} installed={installed} focus={focus} /></Suspense>
-    <OrbitControls makeDefault enablePan={false} minDistance={4.2} maxDistance={10} minPolarAngle={0.28} maxPolarAngle={1.5} target={[0, 0.6, 0]} autoRotate autoRotateSpeed={0.35} />
-  </>;
+function Surface({ road=false }: { road?: boolean }) {
+  const c = useMemo(palette, []);
+  const texture = useMemo(() => {
+    const canvas=document.createElement('canvas'); canvas.width=canvas.height=256;
+    const ctx=canvas.getContext('2d');
+    if(ctx){ctx.fillStyle=road?c.asphalt:c.floor;ctx.fillRect(0,0,256,256);ctx.fillStyle=c.line;ctx.globalAlpha=.06;for(let i=0;i<3000;i++)ctx.fillRect((i*73)%256,(i*41)%256,1,1);ctx.globalAlpha=.15;if(!road){ctx.strokeStyle=c.metal;ctx.strokeRect(0,0,256,256);} }
+    const t=new THREE.CanvasTexture(canvas);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(road?2:10,road?80:10);t.anisotropy=4;return t;
+  },[c,road]);
+  useEffect(()=>()=>texture.dispose(),[texture]);
+  return <mesh rotation-x={-Math.PI/2} position-y={-.015}><planeGeometry args={road?[16,1400]:[80,80]}/><meshStandardMaterial map={texture} metalness={road?0:.2} roughness={road?.9:.38}/></mesh>;
 }
-
-export function CarStudio3D({ car, installed, focus }: { car: CarConfig; installed: boolean[]; focus: string }) {
-  return <div className="relative h-[min(56vh,630px)] min-h-[340px] w-full bg-muted sm:min-h-[450px]" aria-label="Vista tridimensional del auto, arrastrá para girarlo y usá la rueda para acercar">
-    <Canvas shadows dpr={[1, 2]} camera={{ position: [5.4, 2.7, 6.4], fov: 36 }} gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.15 }}>
-      <Stage car={car} installed={installed} focus={focus} />
+function AdaptiveResolution({ enabled }: { enabled: boolean }) {
+  const setDpr=useThree(s=>s.setDpr); const counter=useRef({time:0,frames:0});
+  useFrame((_,dt)=>{if(!enabled)return;counter.current.time+=dt;counter.current.frames++;if(counter.current.time>3){const fps=counter.current.frames/counter.current.time;if(fps<48)setDpr(1);counter.current={time:0,frames:0};}});
+  return null;
+}
+const renderer = { antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1, powerPreference: 'high-performance' as const };
+export function CarStudio3D({ car, installed, focus, model }: { car: CarConfig; installed: boolean[]; focus: string; model?: THREE.Group|null }) {
+  const c=useMemo(palette,[]);
+  return <div className="relative h-[min(60vh,660px)] min-h-[360px] w-full bg-muted" aria-label="Taller tridimensional">
+    <Canvas shadows={false} frameloop="demand" dpr={[1,1.5]} camera={{position:[5.7,2.8,6.8],fov:36}} gl={renderer} onCreated={({gl})=>{gl.shadowMap.enabled=false;}}>
+      <Lighting/><Surface/>
+      {[-6,6].map(x=><mesh key={x} position={[x,2.5,-7]}><boxGeometry args={[.2,5,.4]}/><meshStandardMaterial color={c.metal} metalness={.6} roughness={.4}/></mesh>)}
+      <mesh position={[0,3,-8]}><boxGeometry args={[15,6,.2]}/><meshStandardMaterial color={c.floor} metalness={.2} roughness={.65}/></mesh>
+      <Vehicle car={car} installed={installed} focus={focus} model={model}/>
+      <OrbitControls makeDefault enablePan={false} minDistance={4.5} maxDistance={11} maxPolarAngle={1.48} target={[0,.7,0]} enableDamping/>
     </Canvas>
-    <div className="pointer-events-none absolute bottom-4 left-4 border-l-2 border-primary bg-background/75 px-3 py-2 text-[11px] uppercase text-foreground backdrop-blur-sm">VISTA 3D · {focus}</div>
-    <div className="pointer-events-none absolute bottom-4 right-4 hidden bg-background/60 px-2 py-1 font-mono text-[10px] text-muted-foreground sm:block">ARRASTRÁ PARA GIRAR · SCROLL PARA ZOOM</div>
+    <div className="pointer-events-none absolute bottom-4 left-4 border-l-2 border-primary bg-background/75 px-3 py-2 font-mono text-[10px] uppercase">{focus} · {car.name}</div>
   </div>;
 }
-
-function RaceCars({ car, rival, me, rv, running }: { car: CarConfig; rival: CarConfig; me: Sample | null; rv: Sample | null; running: boolean }) {
-  const all = [true, true, true, true, true, true, true, true, true];
+function Roadside() {
+  const c=useMemo(palette,[]);
   return <>
-    <group position={[-1.6, 0.12, 4 - Math.min((me?.x ?? 0) / 402, 1) * 16]}><Suspense fallback={null}><Vehicle car={car} installed={all} focus="Prueba" moving={running} /></Suspense></group>
-    <group position={[1.6, 0.12, 4 - Math.min((rv?.x ?? 0) / 402, 1) * 16]}><Suspense fallback={null}><Vehicle car={rival} installed={all} focus="Prueba" moving={running} /></Suspense></group>
+    <mesh rotation-x={-Math.PI/2} position-y={-.04}><planeGeometry args={[1500,1500]}/><meshStandardMaterial color={c.grass} roughness={1}/></mesh>
+    <Surface road/>
+    {[-8,8].map(x=><group key={x}><mesh position={[x,.02,0]} rotation-x={-Math.PI/2}><planeGeometry args={[.16,1400]}/><meshBasicMaterial color={c.line}/></mesh><mesh position={[x*1.25,.4,0]}><boxGeometry args={[.12,.8,1400]}/><meshStandardMaterial color={c.metal} metalness={.5} roughness={.5}/></mesh></group>)}
+    <mesh position={[0,.012,0]} rotation-x={-Math.PI/2}><planeGeometry args={[.09,1400]}/><meshBasicMaterial color={c.line}/></mesh>
   </>;
 }
-
-export function Race3D({ car, rival, me, rv, running }: { car: CarConfig; rival: CarConfig; me: Sample | null; rv: Sample | null; running: boolean }) {
-  return <div className="h-[370px] w-full overflow-hidden bg-muted sm:h-[450px]" aria-label="Carrera tridimensional de cuarto de milla">
-    <Canvas shadows dpr={[1, 2]} camera={{ position: [10, 10, 15], fov: 46 }} gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1 }}>
-      <color attach="background" args={["#2b3540"]} /><fog attach="fog" args={["#2b3540", 30, 80]} />
-      <hemisphereLight args={["#e8f0f6", "#2c332e", 1.4]} />
-      <directionalLight position={[10, 18, 6]} intensity={2.6} color="#fff2dd" castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} shadow-camera-left={-22} shadow-camera-right={22} shadow-camera-top={22} shadow-camera-bottom={-22} shadow-bias={-0.0002} />
-      <Environment resolution={128}>
-        <Lightformer intensity={2.5} position={[0, 10, 0]} rotation-x={Math.PI / 2} scale={[18, 18, 1]} color="#f4f8ff" />
-        <Lightformer intensity={1.2} position={[-8, 3, -6]} scale={[12, 3, 1]} color="#ffd9a8" />
-      </Environment>
-      {/* Pasto y pianos */}
-      <mesh rotation-x={-Math.PI / 2} position-y={-0.08} receiveShadow><planeGeometry args={[120, 120]} /><meshStandardMaterial color="#3d4a3c" roughness={1} /></mesh>
-      <mesh rotation-x={-Math.PI / 2} receiveShadow><planeGeometry args={[7.6, 44]} /><meshStandardMaterial color="#2e3234" roughness={0.75} /></mesh>
-      {Array.from({ length: 22 }, (_, i) => <mesh key={i} rotation-x={-Math.PI / 2} position={[-3.7, 0.005, 8 - i * 1.9]}><planeGeometry args={[0.5, 0.95]} /><meshBasicMaterial color={i % 2 ? "#c43b2e" : "#e8e6df"} /></mesh>)}
-      {Array.from({ length: 22 }, (_, i) => <mesh key={i} rotation-x={-Math.PI / 2} position={[3.7, 0.005, 8 - i * 1.9]}><planeGeometry args={[0.5, 0.95]} /><meshBasicMaterial color={i % 2 ? "#c43b2e" : "#e8e6df"} /></mesh>)}
-      {Array.from({ length: 11 }, (_, i) => <mesh key={i} rotation-x={-Math.PI / 2} position={[0, 0.012, 5 - i * 1.8]}><planeGeometry args={[0.08, 0.9]} /><meshBasicMaterial color="#d4d7d0" /></mesh>)}
-      {/* Barreras */}
-      {[-4.4, 4.4].map((x) => <mesh key={x} position={[x, 0.35, -6]}><boxGeometry args={[0.12, 0.7, 40]} /><meshStandardMaterial color="#5a6266" metalness={0.6} roughness={0.4} /></mesh>)}
-      <ContactShadows position={[0, 0.02, 0]} opacity={0.6} scale={26} blur={2} far={4} resolution={512} />
-      <RaceCars car={car} rival={rival} me={me} rv={rv} running={running} />
-    </Canvas>
+function RaceCars({car,rival,me,rv}: {car:CarConfig;rival:CarConfig;me:Sample|null;rv:Sample|null}){
+  const all=Array(9).fill(true);
+  return <>{[[car,me,-2.5],[rival,rv,2.5]].map(([config,sample,x],i)=><group key={i} position={[x as number,0,4-Math.min((sample as Sample|null)?.x??0,402)/402*22]}><Vehicle car={config as CarConfig} installed={all} focus="Prueba"/></group>)}</>;
+}
+export function Race3D({car,rival,me,rv,running}: {car:CarConfig;rival:CarConfig;me:Sample|null;rv:Sample|null;running:boolean}){
+  return <div className="h-[450px] w-full" aria-label="Prueba de aceleración tridimensional"><Canvas shadows={false} dpr={[1,1.5]} gl={renderer} camera={{position:[11,9,16],fov:46}} onCreated={({gl})=>{gl.shadowMap.enabled=false;}}><Lighting outdoor/><Roadside/><RaceCars car={car} rival={rival} me={me} rv={rv}/><AdaptiveResolution enabled={running}/></Canvas></div>;
+}
+function Driver({car,model,paused,reset,input,onSpeed}: {car:CarConfig;model?:THREE.Group|null;paused:boolean;reset:number;input:RefObject<Set<string>>;onSpeed:(speed:number)=>void}){
+  const group=useRef<THREE.Group>(null);const state=useRef(newDriveState());const timer=useRef(0);const accumulator=useRef(0);
+  const config=useMemo(()=>driveSetup(car,simulate(car).topSpeed),[car]);
+  const target=useMemo(()=>new THREE.Vector3(),[]);const look=useMemo(()=>new THREE.Vector3(),[]);
+  useEffect(()=>{state.current=newDriveState();accumulator.current=0;onSpeed(0);},[reset,onSpeed]);
+  useFrame(({camera},raw)=>{
+    const dt=Math.min(raw,.05);const s=state.current;
+    if(!paused){const k=input.current;accumulator.current+=dt;while(accumulator.current>=1/120){stepDrive(s,{throttle:k.has('KeyW')||k.has('ArrowUp')?1:0,steer:(k.has('KeyA')||k.has('ArrowLeft')?1:0)-(k.has('KeyD')||k.has('ArrowRight')?1:0),brake:k.has('KeyS')||k.has('ArrowDown'),drift:k.has('Space')},config,1/120);accumulator.current-=1/120;}
+      if(Math.abs(s.x)>7){s.x=Math.sign(s.x)*7;s.vx*=Math.exp(-8*dt);}
+      if(Math.abs(s.z)>650){s.z=Math.sign(s.z)*650;s.vz=0;}
+    }
+    if(group.current){group.current.position.set(s.x,0,s.z);group.current.rotation.y=s.yaw;}
+    target.set(s.x-Math.sin(s.yaw)*7,2.7,s.z-Math.cos(s.yaw)*7);camera.position.lerp(target,1-Math.exp(-5*dt));look.set(s.x+Math.sin(s.yaw)*5,.8,s.z+Math.cos(s.yaw)*5);camera.lookAt(look);
+    timer.current+=dt;if(timer.current>.1){onSpeed(Math.round(s.speed*3.6));timer.current=0;}
+  });
+  return <group ref={group}><Vehicle car={car} installed={Array(9).fill(true)} focus="Prueba" model={model}/></group>;
+}
+export function Driving3D({car,model}: {car:CarConfig;model?:THREE.Group|null}){
+  const [speed,setSpeed]=useState(0);const[paused,setPaused]=useState(false);const[reset,setReset]=useState(0);const input=useRef(new Set<string>());
+  useEffect(()=>{const down=(e:KeyboardEvent)=>{if(e.target instanceof HTMLInputElement||e.target instanceof HTMLTextAreaElement)return;if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)){e.preventDefault();input.current.add(e.code);}if(e.code==='Escape')setPaused(p=>!p);};const up=(e:KeyboardEvent)=>input.current.delete(e.code);const clear=()=>{input.current.clear();setPaused(true);};window.addEventListener('keydown',down);window.addEventListener('keyup',up);window.addEventListener('blur',clear);return()=>{window.removeEventListener('keydown',down);window.removeEventListener('keyup',up);window.removeEventListener('blur',clear);};},[]);
+  return <div className="relative h-[560px] w-full" aria-label="Conducción libre tridimensional">
+    <Canvas shadows={false} dpr={[1,1.5]} gl={renderer} camera={{position:[0,3,-7],fov:55}} onCreated={({gl})=>{gl.shadowMap.enabled=false;}}><Lighting outdoor/><Roadside/><Driver car={car} model={model} paused={paused} reset={reset} input={input} onSpeed={setSpeed}/><AdaptiveResolution enabled={!paused}/></Canvas>
+    <div className="absolute left-4 top-4 bg-background/80 p-4"><span className="font-mono text-3xl" data-testid="driving-speed">{speed}</span><span className="ml-2 text-xs text-muted-foreground">km/h</span></div>
+    <div className="absolute right-4 top-4 flex gap-2"><Button size="icon" variant="secondary" title={paused?'Continuar':'Pausar'} aria-label={paused?'Continuar':'Pausar'} onClick={()=>setPaused(v=>!v)}>{paused?<Play/>:<Pause/>}</Button><Button size="icon" variant="secondary" title="Reiniciar conducción" aria-label="Reiniciar conducción" onClick={()=>{input.current.clear();setReset(v=>v+1);}}><RotateCcw/></Button></div>
+    <div className="absolute bottom-4 left-4 flex gap-2">{[[ArrowLeft,'KeyA','Girar a la izquierda'],[ArrowUp,'KeyW','Acelerar'],[ArrowDown,'KeyS','Frenar'],[ArrowRight,'KeyD','Girar a la derecha']].map(([Icon,key,label])=>{const Symbol=Icon as typeof ArrowUp;return <Button key={key as string} size="icon" variant="secondary" aria-label={label as string} title={label as string} className="touch-none" onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);input.current.add(key as string);}} onPointerUp={()=>input.current.delete(key as string)} onPointerCancel={()=>input.current.delete(key as string)}><Symbol/></Button>;})}</div>
+    {paused&&<div className="pointer-events-none absolute inset-0 grid place-items-center"><span className="bg-background/80 px-5 py-3 font-display">PAUSA</span></div>}
   </div>;
 }
