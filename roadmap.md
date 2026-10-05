@@ -1,4 +1,8 @@
 # Roadmap
+- [ ] Apply Intel UHD 620 rendering budget, automotive PBR and static vehicle shadows
+- [ ] Add workshop paint/wheel/spoiler shortcuts and external GLB/glTF import
+- [ ] Add responsive keyboard driving with braking, subtle drift and chase camera
+- [ ] Verify workshop rendering, import errors, customization and driving in browser
 - [x] Physics model + car SVG
 - [x] Step-by-step builder starting from empty chassis (no presets) — user request
 - [x] Speed test (drag race + top speed)

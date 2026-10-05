@@ -68,6 +68,20 @@
 }
 
 :root {
+  --scene-studio: #262b2e;
+  --scene-floor: #353a3d;
+  --scene-metal: #929ca2;
+  --scene-rubber: #131619;
+  --scene-glass: #17232a;
+  --scene-sky: #afc3d0;
+  --scene-grass: #54654d;
+  --scene-asphalt: #373a3c;
+  --scene-line: #e4e7e7;
+  --scene-curb: #b93c36;
+  --scene-warm: #fff1de;
+  --scene-cool: #e0edff;
+  --scene-shadow: #050709;
+
   --radius: 0.375rem;
   --background: oklch(0.14 0.01 260);
   --foreground: oklch(0.96 0.005 90);
