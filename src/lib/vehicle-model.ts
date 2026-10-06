@@ -68,6 +68,7 @@ export async function importVehicle(files: File[]) {
   try {
     const loader = new GLTFLoader(manager);
     const model = await loader.parseAsync(await main.arrayBuffer(), '');
+    if (!model.scene) throw new Error('El archivo no contiene una escena 3D visible. Elegí un modelo completo.');
     const normalized = normalizeVehicle(model.scene);
     // Normalization clones materials; uploaded geometry/textures are owned by the imported source.
     return { scene: model.scene, preview: normalized };
