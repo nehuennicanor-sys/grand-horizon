@@ -37,7 +37,11 @@ export function normalizeVehicle(source: THREE.Group) {
       material.name = source.name;
       const name = `${node.name} ${source.name}`;
       material.userData['paint'] = /toycar|body|paint|carrocer|carpaint/i.test(name) && !/glass|tire|tyre|wheel|rubber/i.test(name);
-      if (material.userData['paint']) { material.metalness = .9; material.roughness = .1; }
+      if (material.userData['paint']) {
+        material.metalness = .9; material.roughness = .1;
+        // The temporary toy model bakes a green racing livery into its atlas.
+        if (node.name === 'ToyCar') { material.map = null; material.metalnessMap = null; material.roughnessMap = null; }
+      }
       if (/glass/i.test(name)) { material.color.set('#17232a'); material.transparent = true; material.opacity = .65; material.roughness = .1; material.metalness = .2; }
       material.envMapIntensity = 1;
       return material;
