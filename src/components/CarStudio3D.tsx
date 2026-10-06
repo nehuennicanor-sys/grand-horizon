@@ -15,6 +15,7 @@ function palette() {
   return { studio:get('studio'), floor:get('floor'), metal:get('metal'), rubber:get('rubber'), glass:get('glass'), sky:get('sky'), grass:get('grass'), asphalt:get('asphalt'), line:get('line'), curb:get('curb'), warm:get('warm'), cool:get('cool'), shadow:get('shadow') };
 }
 function Model({ source, car }: { source: THREE.Group; car: CarConfig }) {
+  const invalidate = useThree(state => state.invalidate);
   const object = useMemo(() => normalizeVehicle(source), [source]);
   useEffect(() => () => disposeVehicle(object), [object]);
   useEffect(() => {
@@ -24,7 +25,8 @@ function Model({ source, car }: { source: THREE.Group; car: CarConfig }) {
         if (mat instanceof THREE.MeshStandardMaterial && mat.userData['paint']) mat.color.set(car.color);
       }
     });
-  }, [object, car.color]);
+    invalidate();
+  }, [object, car.color, invalidate]);
   return <primitive object={object} dispose={null} />;
 }
 function DefaultModel({ car }: { car: CarConfig }) { const { scene } = useGLTF(toyCarAsset.url); return <Model source={scene} car={car} />; }

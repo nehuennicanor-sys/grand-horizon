@@ -24,7 +24,7 @@ export function normalizeVehicle(source: THREE.Group) {
   centered.traverse(node => {
     if (!(node instanceof THREE.Mesh)) return;
     const materials = Array.isArray(node.material) ? node.material : [node.material];
-    node.material = materials.map(source => {
+    const converted = materials.map(source => {
       const material = new THREE.MeshStandardMaterial();
       if (source instanceof THREE.MeshStandardMaterial) {
         material.color.copy(source.color);
@@ -42,6 +42,8 @@ export function normalizeVehicle(source: THREE.Group) {
       material.envMapIntensity = 1;
       return material;
     });
+    const first = converted[0];
+    if (first) node.material = Array.isArray(node.material) ? converted : first;
     node.castShadow = false; node.receiveShadow = false;
   });
   return centered;
