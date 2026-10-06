@@ -6,7 +6,9 @@ export function normalizeVehicle(source: THREE.Group) {
   const object = clone(source);
   // Sample model includes a fabric display surface, not a car part.
   if (object.getObjectByName('ToyCar')) object.getObjectByName('Fabric')?.removeFromParent();
-  object.traverse(node => { if (node instanceof THREE.Camera || node instanceof THREE.Light) node.removeFromParent(); });
+  const helpers: THREE.Object3D[] = [];
+  object.traverse(node => { if (node instanceof THREE.Camera || node instanceof THREE.Light) helpers.push(node); });
+  helpers.forEach(node => node.removeFromParent());
   object.updateWorldMatrix(true, true);
   const bounds = new THREE.Box3().setFromObject(object);
   const size = bounds.getSize(new THREE.Vector3());
@@ -22,7 +24,7 @@ export function normalizeVehicle(source: THREE.Group) {
   centered.traverse(node => {
     if (!(node instanceof THREE.Mesh)) return;
     const materials = Array.isArray(node.material) ? node.material : [node.material];
-    node.material = materials.map(source => {
+    const converted = materials.map(source => {
       const material = new THREE.MeshStandardMaterial();
       if (source instanceof THREE.MeshStandardMaterial) {
         material.color.copy(source.color);
@@ -34,12 +36,18 @@ export function normalizeVehicle(source: THREE.Group) {
       }
       material.name = source.name;
       const name = `${node.name} ${source.name}`;
-      material.userData.paint = /toycar|body|paint|carrocer|carpaint/i.test(name) && !/glass|tire|tyre|wheel|rubber/i.test(name);
-      if (material.userData.paint) { material.metalness = .9; material.roughness = .1; }
+      material.userData['paint'] = /toycar|body|paint|carrocer|carpaint/i.test(name) && !/glass|tire|tyre|wheel|rubber/i.test(name);
+      if (material.userData['paint']) {
+        material.metalness = .9; material.roughness = .1;
+        // The temporary toy model bakes a green racing livery into its atlas.
+        if (node.name === 'ToyCar') { material.map = null; material.metalnessMap = null; material.roughnessMap = null; }
+      }
       if (/glass/i.test(name)) { material.color.set('#17232a'); material.transparent = true; material.opacity = .65; material.roughness = .1; material.metalness = .2; }
       material.envMapIntensity = 1;
       return material;
     });
+    const first = converted[0];
+    if (first) node.material = Array.isArray(node.material) ? converted : first;
     node.castShadow = false; node.receiveShadow = false;
   });
   return centered;
@@ -60,6 +68,7 @@ export async function importVehicle(files: File[]) {
   try {
     const loader = new GLTFLoader(manager);
     const model = await loader.parseAsync(await main.arrayBuffer(), '');
+    if (!model.scene) throw new Error('El archivo no contiene una escena 3D visible. Elegí un modelo completo.');
     const normalized = normalizeVehicle(model.scene);
     // Normalization clones materials; uploaded geometry/textures are owned by the imported source.
     return { scene: model.scene, preview: normalized };

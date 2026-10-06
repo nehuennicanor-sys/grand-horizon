@@ -11,19 +11,22 @@ import toyCarAsset from '@/assets/models/toy-car.glb.asset.json';
 
 function palette() {
   const css = getComputedStyle(document.documentElement);
-  return Object.fromEntries(['studio','floor','metal','rubber','glass','sky','grass','asphalt','line','curb','warm','cool','shadow'].map(name => [name, css.getPropertyValue(`--scene-${name}`).trim()]));
+  const get = (name: string) => css.getPropertyValue(`--scene-${name}`).trim();
+  return { studio:get('studio'), floor:get('floor'), metal:get('metal'), rubber:get('rubber'), glass:get('glass'), sky:get('sky'), grass:get('grass'), asphalt:get('asphalt'), line:get('line'), curb:get('curb'), warm:get('warm'), cool:get('cool'), shadow:get('shadow') };
 }
 function Model({ source, car }: { source: THREE.Group; car: CarConfig }) {
+  const invalidate = useThree(state => state.invalidate);
   const object = useMemo(() => normalizeVehicle(source), [source]);
   useEffect(() => () => disposeVehicle(object), [object]);
   useEffect(() => {
     object.traverse(node => {
       if (!(node instanceof THREE.Mesh)) return;
       for (const mat of Array.isArray(node.material) ? node.material : [node.material]) {
-        if (mat instanceof THREE.MeshStandardMaterial && mat.userData.paint) mat.color.set(car.color);
+        if (mat instanceof THREE.MeshStandardMaterial && mat.userData['paint']) mat.color.set(car.color);
       }
     });
-  }, [object, car.color]);
+    invalidate();
+  }, [object, car.color, invalidate]);
   return <primitive object={object} dispose={null} />;
 }
 function DefaultModel({ car }: { car: CarConfig }) { const { scene } = useGLTF(toyCarAsset.url); return <Model source={scene} car={car} />; }
@@ -57,7 +60,7 @@ function Wheel({ x, z, car }: { x: number; z: number; car: CarConfig }) {
     </group>
   </group>;
 }
-function Vehicle({ car, installed, focus, model }: { car: CarConfig; installed: boolean[]; focus: string; model?: THREE.Group | null }) {
+function Vehicle({ car, installed, focus, model }: { car: CarConfig; installed: boolean[]; focus: string; model?: THREE.Group | null | undefined }) {
   const colors = useMemo(palette, []);
   const mounted = installed[7] || focus === 'Carrocería' || focus === 'Ruedas' || focus === 'Prueba' || !!model;
   return <group>
@@ -102,7 +105,7 @@ function AdaptiveResolution({ enabled }: { enabled: boolean }) {
   return null;
 }
 const renderer = { antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1, powerPreference: 'high-performance' as const };
-export function CarStudio3D({ car, installed, focus, model }: { car: CarConfig; installed: boolean[]; focus: string; model?: THREE.Group|null }) {
+export function CarStudio3D({ car, installed, focus, model }: { car: CarConfig; installed: boolean[]; focus: string; model?: THREE.Group|null|undefined }) {
   const c=useMemo(palette,[]);
   return <div className="relative h-[min(60vh,660px)] min-h-[360px] w-full bg-muted" aria-label="Taller tridimensional">
     <Canvas shadows={false} frameloop="demand" dpr={[1,1.5]} camera={{position:[5.7,2.8,6.8],fov:36}} gl={renderer} onCreated={({gl})=>{gl.shadowMap.enabled=false;}}>
@@ -131,7 +134,7 @@ function RaceCars({car,rival,me,rv}: {car:CarConfig;rival:CarConfig;me:Sample|nu
 export function Race3D({car,rival,me,rv,running}: {car:CarConfig;rival:CarConfig;me:Sample|null;rv:Sample|null;running:boolean}){
   return <div className="h-[450px] w-full" aria-label="Prueba de aceleración tridimensional"><Canvas shadows={false} dpr={[1,1.5]} gl={renderer} camera={{position:[11,9,16],fov:46}} onCreated={({gl})=>{gl.shadowMap.enabled=false;}}><Lighting outdoor/><Roadside/><RaceCars car={car} rival={rival} me={me} rv={rv}/><AdaptiveResolution enabled={running}/></Canvas></div>;
 }
-function Driver({car,model,paused,reset,input,onSpeed}: {car:CarConfig;model?:THREE.Group|null;paused:boolean;reset:number;input:RefObject<Set<string>>;onSpeed:(speed:number)=>void}){
+function Driver({car,model,paused,reset,input,onSpeed}: {car:CarConfig;model?:THREE.Group|null|undefined;paused:boolean;reset:number;input:RefObject<Set<string>>;onSpeed:(speed:number)=>void}){
   const group=useRef<THREE.Group>(null);const state=useRef(newDriveState());const timer=useRef(0);const accumulator=useRef(0);
   const config=useMemo(()=>driveSetup(car,simulate(car).topSpeed),[car]);
   const target=useMemo(()=>new THREE.Vector3(),[]);const look=useMemo(()=>new THREE.Vector3(),[]);
@@ -148,7 +151,7 @@ function Driver({car,model,paused,reset,input,onSpeed}: {car:CarConfig;model?:TH
   });
   return <group ref={group}><Vehicle car={car} installed={Array(9).fill(true)} focus="Prueba" model={model}/></group>;
 }
-export function Driving3D({car,model}: {car:CarConfig;model?:THREE.Group|null}){
+export function Driving3D({car,model}: {car:CarConfig;model?:THREE.Group|null|undefined}){
   const [speed,setSpeed]=useState(0);const[paused,setPaused]=useState(false);const[reset,setReset]=useState(0);const input=useRef(new Set<string>());
   useEffect(()=>{const down=(e:KeyboardEvent)=>{if(e.target instanceof HTMLInputElement||e.target instanceof HTMLTextAreaElement)return;if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)){e.preventDefault();input.current.add(e.code);}if(e.code==='Escape')setPaused(p=>!p);};const up=(e:KeyboardEvent)=>input.current.delete(e.code);const clear=()=>{input.current.clear();setPaused(true);};window.addEventListener('keydown',down);window.addEventListener('keyup',up);window.addEventListener('blur',clear);return()=>{window.removeEventListener('keydown',down);window.removeEventListener('keyup',up);window.removeEventListener('blur',clear);};},[]);
   return <div className="relative h-[560px] w-full" aria-label="Conducción libre tridimensional">
