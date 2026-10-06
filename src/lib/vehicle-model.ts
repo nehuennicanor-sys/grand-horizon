@@ -6,7 +6,9 @@ export function normalizeVehicle(source: THREE.Group) {
   const object = clone(source);
   // Sample model includes a fabric display surface, not a car part.
   if (object.getObjectByName('ToyCar')) object.getObjectByName('Fabric')?.removeFromParent();
-  object.traverse(node => { if (node instanceof THREE.Camera || node instanceof THREE.Light) node.removeFromParent(); });
+  const helpers: THREE.Object3D[] = [];
+  object.traverse(node => { if (node instanceof THREE.Camera || node instanceof THREE.Light) helpers.push(node); });
+  helpers.forEach(node => node.removeFromParent());
   object.updateWorldMatrix(true, true);
   const bounds = new THREE.Box3().setFromObject(object);
   const size = bounds.getSize(new THREE.Vector3());
