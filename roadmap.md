@@ -1,4 +1,9 @@
 # Roadmap
+- [ ] Differentiate modern vehicle silhouettes by category in all scenes
+- [ ] Start keyboard driving directly with reverse and first/third-person cameras
+- [ ] Replace straight driving road with beginner closed circuit and boundaries
+- [ ] Add explorable 3D garage surroundings and concise part-selection guides
+- [ ] Remove AI photo generation from workshop and verify updated flows
 - [x] Apply Intel UHD 620 rendering budget, automotive PBR and static vehicle shadows
 - [x] Add workshop paint/wheel/spoiler shortcuts and external GLB/glTF import
 - [x] Add responsive keyboard driving with braking, subtle drift and chase camera

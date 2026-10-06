@@ -5,7 +5,6 @@ import { BookOpen, Check, ChevronRight, Flag, Info, Sparkles, Warehouse as Garag
 import type { Group } from "three";
 import { CarStudio3D, Race3D, Driving3D } from "@/components/CarStudio3D";
 import { VehicleImport } from "@/components/VehicleImport";
-import { CarPhoto } from "@/components/CarPhoto";
 import { AuthPanel, useUser } from "@/components/AuthPanel";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -68,7 +67,7 @@ function GarageGame() {
     const l = LIMITS[category];
     const fallbackLayout = l.layouts[0];
     if (!fallbackLayout) return;
-    setCar((current) => ({ ...current, category, displacement: clamp(current.displacement, ...l.disp), maxRpm: clamp(current.maxRpm, ...l.rpm), layout: l.layouts.includes(current.layout) ? current.layout : fallbackLayout }));
+    setCar((current) => ({ ...current, category, body:category==='deportivo'?'sedan':category==='superdeportivo'?'hiper':'coupe', displacement: clamp(current.displacement, ...l.disp), maxRpm: clamp(current.maxRpm, ...l.rpm), layout: l.layouts.includes(current.layout) ? current.layout : fallbackLayout }));
   };
   const install = () => {
     setInstalled((current) => current.map((value, index) => index === station ? true : value));

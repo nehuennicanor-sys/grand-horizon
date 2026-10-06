@@ -14,7 +14,10 @@ export function stepDrive(s: DriveState, input: DriveInput, config: ReturnType<t
   let longitudinal = s.vx * forwardX + s.vz * forwardZ;
   let lateral = s.vx * rightX + s.vz * rightZ;
   longitudinal += input.throttle * config.acceleration * Math.max(.12, 1 - Math.max(0, longitudinal) / Math.max(1, config.maxSpeed)) * dt;
-  if (input.brake) longitudinal = Math.sign(longitudinal) * Math.max(0, Math.abs(longitudinal) - config.braking * dt);
+  if (input.brake) {
+    // S first removes forward speed, then engages a limited reverse gear.
+    longitudinal = longitudinal > .15 ? Math.max(0, longitudinal - config.braking * dt) : Math.max(-8, longitudinal - config.acceleration * .55 * dt);
+  }
   longitudinal *= Math.exp(-.035 * dt);
   longitudinal = Math.max(-8, Math.min(config.maxSpeed, longitudinal));
   s.yaw += input.steer * 1.15 * Math.min(Math.abs(longitudinal) / 6, 1) / (1 + Math.abs(longitudinal) * .022) * Math.sign(longitudinal || 1) * dt;
