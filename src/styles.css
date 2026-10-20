@@ -2,6 +2,18 @@
 @source "../src";
 @import "tw-animate-css";
 
+/* The display cut: "High Speed" by 177Studio — the wide, slanted, squared
+   lettering from the style sheet. Self-hosted so it renders everywhere. */
+@font-face {
+  font-family: "High Speed";
+  src:
+    url("/fonts/HighSpeed.otf") format("opentype"),
+    url("/fonts/HighSpeed.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /*
@@ -45,7 +57,17 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-ring-offset-background: var(--background);
+  /*
+   * Single-hue system: the whole interface is one blue on a near-black base.
+   * These names are kept from the older palette so existing utilities keep
+   * working, but every one of them is a step of the very same blue ramp.
+   */
+  --color-yellow: var(--yellow);
+  --color-cyan: var(--cyan);
+  --color-sky: var(--sky);
+  --color-pink: var(--pink);
+  --color-violet: var(--violet);
+  --color-orange: var(--orange);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -61,99 +83,132 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --color-track: var(--track);
   --color-track-line: var(--track-line);
-  --font-display: "Orbitron", sans-serif;
-  --font-sans: "Rajdhani", sans-serif;
+  --color-sel: var(--sel);
+  /* Poster-heavy headlines over the wide, slanted, squared display cut from
+     the style sheet. */
+  --font-display: "High Speed", "Orbitron", "Chakra Petch", system-ui, sans-serif;
+  --font-sans: "Chakra Petch", "Sora", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
   --shadow-glow: var(--shadow-glow);
 }
 
 :root {
-  --scene-studio: #262b2e;
-  --scene-floor: #353a3d;
-  --scene-metal: #929ca2;
-  --scene-rubber: #131619;
-  --scene-glass: #17232a;
-  --scene-sky: #afc3d0;
-  --scene-grass: #54654d;
-  --scene-asphalt: #373a3c;
-  --scene-line: #e4e7e7;
-  --scene-curb: #b93c36;
-  --scene-warm: #fff1de;
-  --scene-cool: #e0edff;
-  --scene-shadow: #050709;
+  --scene-studio: #232323;
+  --scene-floor: #2b2b2b;
+  --scene-metal: #93a0ad;
+  --scene-rubber: #12161a;
+  --scene-glass: #141c26;
+  --scene-sky: #79a6dc;
+  --scene-grass: #454f47;
+  --scene-asphalt: #33373c;
+  --scene-line: #eef3f8;
+  --scene-curb: #e9c22f;
+  --scene-warm: #f0f5ff;
+  --scene-cool: #dbe9f7;
+  --scene-shadow: #05070c;
 
   --radius: 0.375rem;
-  --background: oklch(0.14 0.01 260);
-  --foreground: oklch(0.96 0.005 90);
-  --card: oklch(0.19 0.012 260);
-  --card-foreground: oklch(0.96 0.005 90);
-  --popover: oklch(0.19 0.012 260);
-  --popover-foreground: oklch(0.96 0.005 90);
-  --primary: oklch(0.72 0.2 40);
-  --primary-foreground: oklch(0.14 0.01 260);
-  --secondary: oklch(0.25 0.015 260);
-  --secondary-foreground: oklch(0.96 0.005 90);
-  --muted: oklch(0.24 0.012 260);
-  --muted-foreground: oklch(0.68 0.015 260);
-  --accent: oklch(0.85 0.17 95);
-  --accent-foreground: oklch(0.14 0.01 260);
-  --destructive: oklch(0.62 0.23 25);
+
+  --background: oklch(0.14 0.012 258);
+  --foreground: oklch(0.98 0.005 250);
+  --card: oklch(0.19 0.014 258);
+  --card-foreground: oklch(0.98 0.005 250);
+  --popover: oklch(0.19 0.014 258);
+  --popover-foreground: oklch(0.98 0.005 250);
+  /*
+   * Exactly two blues and nothing else.
+   *
+   * --primary is the bright blue used for type, icons and hairlines over the
+   * near-black base. --sel is the deep blue used as a flat fill for every
+   * state that means "this is chosen": the active station, the selected
+   * option, the circuit card, the call to action. Both are flat colours: there
+   * is no gradient on any surface, and no warm colour anywhere in the palette.
+   */
+  --primary: oklch(0.74 0.14 248);
+  --primary-foreground: oklch(0.99 0.004 250);
+  --sel: oklch(0.46 0.18 258);
+  --secondary: oklch(0.24 0.018 258);
+  --secondary-foreground: oklch(0.98 0.005 250);
+  --muted: oklch(0.23 0.016 258);
+  --muted-foreground: oklch(0.73 0.02 250);
+  --accent: oklch(0.46 0.18 258);
+  --accent-foreground: oklch(0.99 0.004 250);
+  --destructive: oklch(0.6 0.18 25);
   --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.3 0.015 260);
-  --input: oklch(0.3 0.015 260);
-  --ring: oklch(0.72 0.2 40);
-  --chart-1: oklch(0.72 0.2 40);
-  --chart-2: oklch(0.7 0.15 200);
-  --chart-3: oklch(0.85 0.17 95);
-  --chart-4: oklch(0.65 0.2 330);
-  --chart-5: oklch(0.7 0.18 145);
-  --sidebar: oklch(0.19 0.012 260);
-  --sidebar-foreground: oklch(0.96 0.005 90);
-  --sidebar-primary: oklch(0.72 0.2 40);
-  --sidebar-primary-foreground: oklch(0.14 0.01 260);
-  --sidebar-accent: oklch(0.25 0.015 260);
-  --sidebar-accent-foreground: oklch(0.96 0.005 90);
-  --sidebar-border: oklch(0.3 0.015 260);
-  --sidebar-ring: oklch(0.72 0.2 40);
-  --track: oklch(0.22 0.008 260);
-  --track-line: oklch(0.9 0.02 95 / 0.6);
-  --gradient-hero: radial-gradient(ellipse at top, oklch(0.72 0.2 40 / 0.25), transparent 60%);
-  --shadow-glow: 0 0 40px -8px oklch(0.72 0.2 40 / 0.6);
+  --border: oklch(0.32 0.02 258);
+  --input: oklch(0.32 0.02 258);
+  --ring: oklch(0.74 0.14 248);
+
+  /* Legacy colour names are kept so older utilities keep compiling. Blue and
+     yellow are the only two hues in the interface, and every other legacy name
+     resolves to a step of the blue ramp so nothing can paint an orange or a
+     pink by accident. */
+  --yellow: oklch(0.87 0.17 96);
+  --cyan: oklch(0.84 0.1 232);
+  --sky: oklch(0.64 0.12 258);
+  --pink: oklch(0.56 0.12 260);
+  --violet: oklch(0.5 0.1 265);
+  --orange: oklch(0.46 0.18 258);
+
+  --chart-1: oklch(0.74 0.14 248);
+  --chart-2: oklch(0.84 0.1 232);
+  --chart-3: oklch(0.64 0.12 258);
+  --chart-4: oklch(0.56 0.12 260);
+  --chart-5: oklch(0.44 0.1 262);
+  --sidebar: oklch(0.17 0.014 258);
+  --sidebar-foreground: oklch(0.98 0.005 250);
+  --sidebar-primary: oklch(0.74 0.14 248);
+  --sidebar-primary-foreground: oklch(0.99 0.004 250);
+  --sidebar-accent: oklch(0.46 0.18 258);
+  --sidebar-accent-foreground: oklch(0.99 0.004 250);
+  --sidebar-border: oklch(0.32 0.02 258);
+  --sidebar-ring: oklch(0.74 0.14 248);
+  --track: oklch(0.23 0.016 258);
+  --track-line: oklch(0.84 0.1 232 / 0.45);
+  --shadow-glow: 0 0 34px -6px oklch(0.6 0.18 256 / 0.55);
 }
 
+/* Mirrored so an explicit dark theme never falls back to a stale palette. */
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+  --background: oklch(0.14 0.012 258);
+  --foreground: oklch(0.98 0.005 250);
+  --card: oklch(0.19 0.014 258);
+  --card-foreground: oklch(0.98 0.005 250);
+  --popover: oklch(0.19 0.014 258);
+  --popover-foreground: oklch(0.98 0.005 250);
+  --primary: oklch(0.74 0.14 248);
+  --primary-foreground: oklch(0.99 0.004 250);
+  --sel: oklch(0.46 0.18 258);
+  --secondary: oklch(0.24 0.018 258);
+  --secondary-foreground: oklch(0.98 0.005 250);
+  --muted: oklch(0.23 0.016 258);
+  --muted-foreground: oklch(0.73 0.02 250);
+  --accent: oklch(0.46 0.18 258);
+  --accent-foreground: oklch(0.99 0.004 250);
+  --destructive: oklch(0.6 0.18 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.32 0.02 258);
+  --input: oklch(0.32 0.02 258);
+  --ring: oklch(0.74 0.14 248);
+  --yellow: oklch(0.87 0.17 96);
+  --cyan: oklch(0.84 0.1 232);
+  --sky: oklch(0.64 0.12 258);
+  --pink: oklch(0.56 0.12 260);
+  --violet: oklch(0.5 0.1 265);
+  --orange: oklch(0.46 0.18 258);
+  --chart-1: oklch(0.74 0.14 248);
+  --chart-2: oklch(0.84 0.1 232);
+  --chart-3: oklch(0.64 0.12 258);
+  --chart-4: oklch(0.56 0.12 260);
+  --chart-5: oklch(0.44 0.1 262);
+  --sidebar: oklch(0.17 0.014 258);
+  --sidebar-foreground: oklch(0.98 0.005 250);
+  --sidebar-primary: oklch(0.74 0.14 248);
+  --sidebar-primary-foreground: oklch(0.99 0.004 250);
+  --sidebar-accent: oklch(0.46 0.18 258);
+  --sidebar-accent-foreground: oklch(0.99 0.004 250);
+  --sidebar-border: oklch(0.32 0.02 258);
+  --sidebar-ring: oklch(0.74 0.14 248);
 }
 
 @layer base {
@@ -161,14 +216,188 @@
     border-color: var(--color-border);
   }
 
+  html {
+    scroll-behavior: smooth;
+    color-scheme: dark;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Bolder default headings: the wide square display cut, slanted. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-style: italic;
+    letter-spacing: 0.02em;
+  }
+
+  ::selection {
+    background: var(--color-primary);
+    color: var(--color-primary-foreground);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: oklch(0.16 0.014 258);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0.46 0.18 258);
   }
 }
 
-@utility bg-hero { background-image: var(--gradient-hero); }
-@keyframes road { from { background-position-x: 0; } to { background-position-x: -80px; } }
+/* The header strip and the progress readout: one flat blue, no sweep. */
+@utility bg-hero {
+  background-color: oklch(0.18 0.02 258);
+}
+@utility brand-bar {
+  background-color: var(--primary);
+}
+/* Every "this is chosen" surface in the game: a flat deep blue. */
+@utility select-bar {
+  background-color: var(--sel);
+}
+@keyframes road {
+  from {
+    background-position-x: 0;
+  }
+  to {
+    background-position-x: -80px;
+  }
+}
 @utility road-lines {
-  background-image: repeating-linear-gradient(90deg, var(--track-line) 0 40px, transparent 40px 80px);
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--track-line) 0 40px,
+    transparent 40px 80px
+  );
+}
+
+@utility text-glow {
+  text-shadow: 0 0 22px oklch(0.6 0.18 256 / 0.5);
+}
+
+/* Modern glass surface: one flat fill, a hairline edge and a specular line on
+   the top lip so it reads as polished metal. No gradient and no backdrop
+   blur, which also keeps the GPU free for the 3D scene. */
+@utility glass {
+  background-color: oklch(0.185 0.015 258);
+  border: 1px solid oklch(0.3 0.02 258);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.07);
+}
+
+@utility glass-soft {
+  background-color: oklch(0.16 0.013 258);
+  border: 1px solid oklch(0.27 0.018 258);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.05);
+}
+
+@utility panel-edge {
+  background-color: oklch(0.19 0.015 258);
+}
+
+/* Display type: solid white, no clipped gradient behind the letters. */
+@utility brand-text {
+  color: var(--color-foreground);
+}
+
+/* Angled corner used by hero chips, clipped instead of rounded so it still
+   reads as motorsport rather than as a generic card. */
+@utility clip-slant {
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+}
+
+@utility glow-primary {
+  box-shadow:
+    0 0 0 1px oklch(0.6 0.16 254 / 0.6),
+    0 10px 32px -10px oklch(0.5 0.18 258 / 0.7);
+}
+
+@utility glow-accent {
+  box-shadow:
+    0 0 0 1px oklch(0.6 0.16 254 / 0.6),
+    0 10px 32px -10px oklch(0.5 0.18 258 / 0.7);
+}
+
+/* Specular lip for tiles that need the extra shine. */
+@utility gloss {
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.12);
+}
+
+/* Flat field for the text inputs: dark, hairline edge, blue focus ring. */
+@utility control-input {
+  width: 100%;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background-color: oklch(0.11 0.01 258);
+  padding-inline: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--foreground);
+  outline: none;
+
+  &:focus {
+    border-color: var(--primary);
+  }
+}
+
+/* Cinematic vignette: a CSS overlay costs nothing inside the WebGL budget,
+   unlike a post-processing pass, so the frame rate stays untouched. */
+.scene-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 52%, rgb(0 0 0 / 0.38) 100%);
+}
+
+/* Speed rush: as the car gets quick the frame closes in and two faint streaks
+   pull past the shoulders. Static layers, only the opacity moves, so the
+   compositor does the work and the frame budget never notices. */
+.speed-rush {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 30%, rgb(0 0 0 / 0.6) 100%);
+}
+
+.speed-streaks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  mix-blend-mode: screen;
+  background:
+    linear-gradient(
+      90deg,
+      rgb(255 255 255 / 0.14),
+      transparent 20%,
+      transparent 80%,
+      rgb(255 255 255 / 0.14)
+    ),
+    linear-gradient(0deg, rgb(255 255 255 / 0.05), transparent 30%);
+}
+
+/* Thin blue grid behind the interface, drawn by the compositor. */
+.app-grid::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    linear-gradient(oklch(0.74 0.14 248 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.74 0.14 248 / 0.045) 1px, transparent 1px);
+  background-size: 52px 52px;
 }
