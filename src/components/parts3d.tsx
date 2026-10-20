@@ -1014,6 +1014,7 @@ export function InteriorModel({
   steerRef,
   cockpit = false,
   aligned = false,
+  imported = false,
   podDrop = 0,
 }: {
   car: CarConfig;
@@ -1022,6 +1023,12 @@ export function InteriorModel({
   steerRef?: RefObject<number> | undefined;
   /** Cockpit mode faces straight ahead instead of the studio's three-quarter pose. */
   cockpit?: boolean;
+  /**
+   * The imported shell already supplies the bonnet, wings and roof line. In that
+   * case the cockpit only draws the dark cabin trim, so the two bodies do not
+   * z-fight and the pale procedural A-pillars do not float over the imported car.
+   */
+  imported?: boolean;
   /**
    * Faces the car's own axes with no cockpit frame: the same furniture seen
    * through the glass from outside, where the shell is already there.
@@ -1081,7 +1088,9 @@ export function InteriorModel({
   return (
     <group scale={scale} rotation-y={cockpit || aligned ? 0 : -0.4}>
       {/* Bucket seat: shell, base cushion, backrest and side bolsters. Welded
-          into one draw per material once mounted. */}
+          into one draw per material once mounted. It sits behind the driver's
+          eye, so the cockpit skips it instead of paying for hidden geometry. */}
+      {!cockpit && (
       <Merged>
         <group position={[0, 0, 0]}>
         <RoundedBox args={[0.56, 0.5, 0.5]} radius={0.09} smoothness={3} position={[0, 0.55, -0.3]} rotation-x={-0.18} material={shell} />
@@ -1116,6 +1125,7 @@ export function InteriorModel({
         ))}
         </group>
       </Merged>
+      )}
       {/* Steering column and wheel. The rim faces the driver and the whole
           assembly turns with the live steering input. The wheel is a proper
           racing item: flattened carbon rim, leather grips at nine and three,
@@ -1254,61 +1264,73 @@ export function InteriorModel({
           dropped, but in the studio the interior is shown on its own. */}
       {cockpit && (
         <Merged>
-          {/* Bonnet and front wings in the car's own paint: the nose is the one
-              piece of bodywork a driver looks at all race long, and it has to
-              survive the dropped shell. */}
-          <group position={[0, 0.66, 1.55]} rotation-x={0.12}>
-            <RoundedBox args={[1.3, 0.06, 1.5]} radius={0.03} smoothness={3} material={paint} />
-            {/* Vents and shut lines ride the same tilt as the panel: hung off
-                the cabin they floated a couple of centimetres over the paint. */}
-            {[-0.26, 0.26].map((x) => (
-              <mesh key={`vent${x}`} position={[x, 0.042, 0.07]} material={m.black}>
-                <boxGeometry args={[0.24, 0.02, 0.46]} />
+          {!imported && (
+            <>
+              {/* Bonnet and front wings in the car's own paint: they survive
+                  the dropped procedural shell. An imported body already has
+                  these panels, so drawing them again would double the nose. */}
+              <group position={[0, 0.66, 1.55]} rotation-x={0.12}>
+                <RoundedBox args={[1.3, 0.06, 1.5]} radius={0.03} smoothness={3} material={paint} />
+                {[-0.26, 0.26].map((x) => (
+                  <mesh key={`vent${x}`} position={[x, 0.042, 0.07]} material={m.black}>
+                    <boxGeometry args={[0.24, 0.02, 0.46]} />
+                  </mesh>
+                ))}
+                {[-0.5, 0.5].map((x) => (
+                  <mesh key={`line${x}`} position={[x, 0.03, 0.35]} material={m.dark}>
+                    <boxGeometry args={[0.012, 0.02, 1.1]} />
+                  </mesh>
+                ))}
+              </group>
+              <group position={[0, 0.48, 2.52]} rotation-x={0.32}>
+                <RoundedBox args={[1.2, 0.05, 0.95]} radius={0.03} smoothness={3} material={paint} />
+              </group>
+              {[-1, 1].map((s) => (
+                <group key={`wing${s}`} position={[s * 0.68, 0.6, 1.5]} rotation-x={0.12} rotation-z={s * -0.07}>
+                  <RoundedBox args={[0.34, 0.05, 1.45]} radius={0.03} smoothness={3} material={paint} />
+                </group>
+              ))}
+            </>
+          )}
+          {/* A single cabin lamp: outdoors the interior would sit in its own
+              shade and read as one black mass from the driver's eye. */}
+          <pointLight position={[0, 1.35, 0.2]} intensity={2.6} distance={3} decay={2} color="#e6ecf4" />
+          {imported ? (
+            <>
+              {/* The outer shell is hidden in first person, so drawing its
+                  header or A-pillars here would leave two loose bars floating
+                  across the road. The dashboard, wheel and door tops are enough
+                  to read the cabin. */}
+            </>
+          ) : (
+            <>
+              {/* Headliner and pillars in pale trim for the procedural cabin: a
+                  black cabin reads as a hole punched in the frame. */}
+              <mesh position={[0, 1.62, 0.1]} material={m.cast}>
+                <boxGeometry args={[1.36, 0.04, 1.5]} />
               </mesh>
-            ))}
-            {[-0.5, 0.5].map((x) => (
-              <mesh key={`line${x}`} position={[x, 0.03, 0.35]} material={m.dark}>
-                <boxGeometry args={[0.012, 0.02, 1.1]} />
+              {[-1, 1].map((s) => (
+                <mesh
+                  key={`ap${s}`}
+                  position={[s * 0.62, 1.2, 1.46]}
+                  rotation-x={-0.2}
+                  rotation-z={-s * 0.06}
+                  material={m.cast}
+                >
+                  <boxGeometry args={[0.055, 0.62, 0.08]} />
+                </mesh>
+              ))}
+              <mesh position={[0, 1.56, 1.0]} rotation-x={0.1} material={m.cast}>
+                <boxGeometry args={[1.36, 0.07, 0.18]} />
               </mesh>
-            ))}
-          </group>
-          <group position={[0, 0.48, 2.52]} rotation-x={0.32}>
-            <RoundedBox args={[1.2, 0.05, 0.95]} radius={0.03} smoothness={3} material={paint} />
-          </group>
-          {[-1, 1].map((s) => (
-            <group key={`wing${s}`} position={[s * 0.68, 0.6, 1.5]} rotation-x={0.12} rotation-z={s * -0.07}>
-              <RoundedBox args={[0.34, 0.05, 1.45]} radius={0.03} smoothness={3} material={paint} />
-            </group>
-          ))}
-          {/* A small lamp inside the cabin: outdoors the interior would sit in
-              its own shade and read as one black mass from the driver's eye. */}
-          <pointLight position={[0, 1.5, 0.2]} intensity={3.2} distance={3} decay={2} color="#e6ecf4" />
-          <pointLight position={[0, 0.85, 1.2]} intensity={1.8} distance={2.2} decay={2} color="#cfd8e4" />
-          {/* Headliner and pillars in pale trim: a black cabin reads as a hole
-              punched in the frame, and every real headliner is a light grey. */}
-          <mesh position={[0, 1.62, 0.1]} material={m.cast}>
-            <boxGeometry args={[1.36, 0.04, 1.5]} />
-          </mesh>
-          {[-1, 1].map((s) => (
-            <mesh
-              key={`ap${s}`}
-              position={[s * 0.62, 1.2, 1.46]}
-              rotation-x={-0.2}
-              rotation-z={-s * 0.06}
-              material={m.cast}
-            >
-              <boxGeometry args={[0.055, 0.62, 0.08]} />
-            </mesh>
-          ))}
-          <mesh position={[0, 1.56, 1.0]} rotation-x={0.1} material={m.cast}>
-            <boxGeometry args={[1.36, 0.07, 0.18]} />
-          </mesh>
-          <mesh position={[0, 1.36, 1.02]} material={m.black}>
-            <boxGeometry args={[0.34, 0.1, 0.04]} />
-          </mesh>
-          <mesh position={[0, 1.47, 1.05]} material={m.dark}>
-            <boxGeometry args={[0.04, 0.14, 0.04]} />
-          </mesh>
+              <mesh position={[0, 1.36, 1.02]} material={m.black}>
+                <boxGeometry args={[0.34, 0.1, 0.04]} />
+              </mesh>
+              <mesh position={[0, 1.47, 1.05]} material={m.dark}>
+                <boxGeometry args={[0.04, 0.14, 0.04]} />
+              </mesh>
+            </>
+          )}
           <mesh position={[0, 1.05, -0.8]} material={m.dark}>
             <boxGeometry args={[1.26, 0.95, 0.08]} />
           </mesh>

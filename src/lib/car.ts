@@ -1,3 +1,5 @@
+import { BODY_OPTIONS, bodyTopSpeed } from "./bodywork";
+
 export type Category = "deportivo" | "superdeportivo" | "carreras";
 export type Layout =
   | "I3"
@@ -373,6 +375,9 @@ export function simulate(c: CarConfig, maxTime = 60): Result {
   const mu = TIRE_MU[c.tires];
   const shiftTime = SHIFT[c.gearbox];
   const eff = DRIVE_EFF[c.drive];
+  // A GT3 has a real, gear-limited ceiling; the same shell must not post a
+  // fantasy number just because the engine sliders were maxed out.
+  const ceiling = (bodyTopSpeed(c.bodyId) ?? 420) / 3.6;
   const idle = 1000;
   let t = 0,
     v = 0,
@@ -410,7 +415,7 @@ export function simulate(c: CarConfig, maxTime = 60): Result {
     const drag = 0.5 * rho * s.cd * s.area * v * v;
     const roll = 0.013 * (s.mass * g + down);
     const a = (drive - drag - roll) / (s.mass * 1.05);
-    v = Math.max(0, v + a * dt);
+    v = Math.min(ceiling, Math.max(0, v + a * dt));
     x += v * dt;
     t += dt;
     const kmh = v * 3.6;
@@ -510,10 +515,12 @@ export function normalizeCar(
       : legacyGt === "mercedes-amg-gt3-evo"
         ? "gt-v8"
         : undefined;
+  const requestedBody =
+    typeof stored.bodyId === "string" && stored.bodyId ? stored.bodyId : undefined;
   const bodyId =
-    typeof stored.bodyId === "string" && stored.bodyId
-      ? stored.bodyId
-      : legacyBody;
+    (requestedBody && BODY_OPTIONS.some((body) => body.id === requestedBody)
+      ? requestedBody
+      : legacyBody) ?? "coupe-v10";
   const name =
     legacyBody === "coupe-v10"
       ? "Cupé V10"

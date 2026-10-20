@@ -23,6 +23,8 @@ export type BodyOption = {
   modelUrl: string;
   /** Yaw applied before normalization, to put the nose on +Z. */
   modelYaw?: number;
+  /** Real-world top speed of the car this shell represents, in km/h. */
+  topSpeed: number;
   credit: BodyCredit;
 };
 
@@ -33,9 +35,10 @@ export const BODY_OPTIONS: BodyOption[] = [
     tagline: "Motor central · atmosférico",
     description:
       "Silueta baja y ancha, cabina adelantada y gran toma de aire lateral. Una base ágil para proyectos de motor central.",
-    color: "#c3c7ca",
-    accent: "#d5001c",
+    color: "#7fb2d9",
+    accent: "#f26b21",
     modelUrl: "/models/porsche-carrera-gt/scene.gltf",
+    topSpeed: 330,
     credit: {
       author: "Ajay Gawde",
       source:
@@ -50,10 +53,11 @@ export const BODY_OPTIONS: BodyOption[] = [
     tagline: "Turismo de competición",
     description:
       "Carrocería de GT con pasos de rueda anchos, splitter, difusor y alerón trasero. Pensada para circuitos y resistencia.",
-    color: "#173d78",
-    accent: "#d6001c",
+    color: "#0b0b0d",
+    accent: "#e10600",
     modelUrl: "/models/mercedes-amg-gt3-red-bull/scene.gltf",
     modelYaw: -Math.PI / 2,
+    topSpeed: 300,
     credit: {
       author: "VTX",
       source:
@@ -68,9 +72,10 @@ export const BODY_OPTIONS: BodyOption[] = [
     tagline: "Coupé de resistencia",
     description:
       "Coupé de turismo con capó largo, pasos ensanchados, splitter y alerón de circuito. Base robusta para proyectos de resistencia.",
-    color: "#c7ccd2",
-    accent: "#2d5f9a",
+    color: "#f2f4f6",
+    accent: "#1f5fbf",
     modelUrl: "/models/touring-gt3/scene.gltf",
+    topSpeed: 305,
     credit: {
       author: "Alex Ka",
       source:
@@ -79,8 +84,67 @@ export const BODY_OPTIONS: BodyOption[] = [
       licenseUrl: "http://creativecommons.org/licenses/by-nc-nd/4.0/",
     },
   },
+  {
+    id: "scafati-gt",
+    name: "Scafati GT",
+    tagline: "GT artesanal · V12",
+    description:
+      "GT de carrocería baja, capó largo y cabina retrasada. Una base de estilo artesanal para proyectos de gran turismo.",
+    color: "#2f9e44",
+    accent: "#111827",
+    modelUrl: "/models/furnari-scafati-gt/scene.gltf",
+    topSpeed: 290,
+    credit: {
+      author: "All-Wide",
+      source:
+        "https://sketchfab.com/3d-models/furnari-scafati-gt-0770b1eb9bdf420d8fa1202a46b552ec",
+      license: "CC-BY-4.0",
+      licenseUrl: "http://creativecommons.org/licenses/by/4.0/",
+    },
+  },
+  {
+    id: "lmp1-hybrid",
+    name: "LMP1 Híbrido",
+    tagline: "Resistencia · prototipo",
+    description:
+      "Prototipo de resistencia con cubierta cerrada, pasos de rueda carenados y aerodinámica de baja resistencia. Pensado para circuitos rápidos y tandas largas.",
+    color: "#c9ced6",
+    accent: "#d90429",
+    modelUrl: "/models/audi-r18-tdi/scene.glb",
+    topSpeed: 340,
+    credit: {
+      author: "amogusstrikesback2",
+      source:
+        "https://sketchfab.com/3d-models/audi-r18-tdi-5f61c5b9354b493e8b5fb463548dddcd",
+      license: "CC-BY-4.0",
+      licenseUrl: "http://creativecommons.org/licenses/by/4.0/",
+    },
+  },
+  {
+    id: "racer-gt",
+    name: "Racer GT",
+    tagline: "Prototipo de competición · extremo",
+    description:
+      "Prototipo ligero de cubierta cerrada, morro bajo y alerón de gran tamaño. Una base de competición pensada para velocidad punta y tandas explosivas.",
+    color: "#1e50ff",
+    accent: "#f4d000",
+    modelUrl: "/models/racer-gt/scene.gltf",
+    topSpeed: 336,
+    credit: {
+      author: "amogusstrikesback2",
+      source:
+        "https://sketchfab.com/3d-models/ea-racer-gt-burnout-revenge-c720d093e6fa4ee398a9b21d5d49f9d7",
+      license: "CC-BY-4.0",
+      licenseUrl: "http://creativecommons.org/licenses/by/4.0/",
+    },
+  },
 ];
 
 export function bodyById(id: string | null | undefined): BodyOption | undefined {
   return id ? BODY_OPTIONS.find((body) => body.id === id) : undefined;
+}
+
+/** The shell's real-world speed ceiling in km/h; used by the simulator too. */
+export function bodyTopSpeed(id: string | null | undefined) {
+  return bodyById(id)?.topSpeed;
 }

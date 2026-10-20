@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NEUTRAL_SCULPT, specs, simulate, type CarConfig, type Sample } from "@/lib/car";
-import { normalizeVehicle, disposeVehicle } from "@/lib/vehicle-model";
+import { normalizeVehicle, disposeVehicle, paintPatternIndex } from "@/lib/vehicle-model";
 import {
   applyImpact,
   damageState,
@@ -1921,16 +1921,25 @@ function Model({
   const appliedSteer = useRef(0);
   useEffect(() => () => disposeVehicle(object), [object]);
   useEffect(() => {
+    const pattern = paintPatternIndex(car.bodyId);
     object.traverse((node) => {
       if (!(node instanceof THREE.Mesh)) return;
       for (const mat of Array.isArray(node.material) ? node.material : [node.material]) {
         if (!(mat instanceof THREE.MeshStandardMaterial)) continue;
-        if (mat.userData["paint"]) mat.color.set(car.color);
-        else if (/^caliper$/i.test(mat.name)) mat.color.set(car.accent);
+        if (mat.userData["paint"]) {
+          mat.color.set(car.color);
+          const livery = mat.userData["paintShader"] as
+            | { uAccent: { value: THREE.Color }; uPattern: { value: number } }
+            | undefined;
+          if (livery) {
+            livery.uAccent.value.set(car.accent);
+            livery.uPattern.value = pattern;
+          }
+        } else if (/^caliper$/i.test(mat.name)) mat.color.set(car.accent);
       }
     });
     invalidate();
-  }, [object, car.color, car.accent, invalidate]);
+  }, [object, car.bodyId, car.color, car.accent, invalidate]);
   useFrame((_, dt) => {
     const speed = speedRef?.current ?? 0;
     if (speed) {
@@ -2160,8 +2169,16 @@ function Vehicle({
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
+    const inInterior = (object: THREE.Object3D) => {
+      let node: THREE.Object3D | null = object;
+      while (node) {
+        if (node.userData["noShadow"] === true) return true;
+        node = node.parent;
+      }
+      return false;
+    };
     root.traverse((o) => {
-      if (o instanceof THREE.Mesh) o.castShadow = true;
+      if (o instanceof THREE.Mesh) o.castShadow = !inInterior(o);
     });
   });
   // The studio bakes its shadow map once. Any change to the shell, the wheels
@@ -2176,12 +2193,12 @@ function Vehicle({
       <Shadow />
       {mounted ? (
         <>
-          {/* In the cockpit the procedural shell is dropped: its glazing is a
-              solid dark volume, so from the driver's eye it would fill the
-              screen with tinted sheets. The cabin frame inside InteriorModel
-              replaces it, which is how a real cockpit is drawn from within. An
-              imported model is left alone so the user keeps their own car. */}
-          {cockpit && !model ? null : (
+          {/* In the cockpit every outer shell is dropped: the procedural one
+              has solid glazing, and the imported showpieces hide their interiors
+              (and some prototypes have a closed canopy with no cabin at all), so
+              either shell fills the driver's eye with tinted sheets and bars.
+              InteriorModel supplies the complete cabin instead. */}
+          {cockpit ? null : (
             <group position-y={car.rideHeight * 0.05}>
               {model ? (
                 <Suspense fallback={<Loader />}>
@@ -2196,9 +2213,9 @@ function Vehicle({
           )}
           {/* The interior always shows in the cockpit, body on or not. */}
           {cockpit && (
-            <group position-y={car.rideHeight * 0.05}>
+            <group position-y={car.rideHeight * 0.05} userData={{ noShadow: true }}>
               <group position={[0, 0.02, 0.1]}>
-                <InteriorModel car={car} cockpit steerRef={steerRef} />
+                <InteriorModel car={car} cockpit imported steerRef={steerRef} />
               </group>
             </group>
           )}
@@ -2214,8 +2231,8 @@ function Vehicle({
             </group>
           )}
           {installed[8] && (
-            <group position={[0, 0.02, 0.1]}>
-              <InteriorModel car={car} cockpit steerRef={steerRef} />
+            <group position={[0, 0.02, 0.1]} userData={{ noShadow: true }}>
+              <InteriorModel car={car} cockpit imported={!!model} steerRef={steerRef} />
             </group>
           )}
         </>
@@ -4334,7 +4351,10 @@ function TrackEnvironment({ track }: { track: ClubCircuit }) {
   const { level } = useContext(PerfContext);
   const treeShadow = useBlobShadow();
   const barrierOffset = track.halfWidth + 2.4;
-  const wallStep = level === 2 ? 3 : level === 1 ? 5 : 9;
+  // Shorter base spans mean the barrier follows the arc instead of reading as a
+  // chain of visible kinks in a long corner. The recursion below still catches
+  // any chord that would reach the drivable band.
+  const wallStep = level === 2 ? 2 : level === 1 ? 4 : 6;
   // Tree density comes from the circuit profile: a deep forest is packed, a
   // street circuit has none at all.
   const treeStep = useMemo(() => {
@@ -5074,6 +5094,11 @@ void main() {
   vec3 rgbB = rgbA * 0.5 + 0.25 * (tap(vUv + dir * -0.5) + tap(vUv + dir * 0.5));
   float lB = lumaOf(rgbB);
   vec3 rgb = (lB < lMin || lB > lMax) ? rgbA : rgbB;
+  // A light unsharp pass on the same five taps. At native density FXAA alone
+  // still leaves panels and lettering slightly soft; this restores local
+  // contrast without another texture fetch or a second full-screen pass.
+  vec3 local = (rgbNW + rgbNE + rgbSW + rgbSE) * 0.25;
+  rgb = max(rgb + (rgb - local) * 0.22, vec3(0.0));
   gl_FragColor = vec4(present(rgb), center.a);
 }
 `;
@@ -5199,6 +5224,7 @@ function AdaptiveResolution({
   onStats,
   budgetMs = FRAME_BUDGET_MS,
   minDpr = 1,
+  floorDpr = 1,
 }: {
   enabled: boolean;
   onStats?: ((p: Perf) => void) | undefined;
@@ -5210,6 +5236,12 @@ function AdaptiveResolution({
    * back if the extra pixels would cost the frame budget.
    */
   minDpr?: number;
+  /**
+   * Lowest render density the governor may choose. On the circuit this is
+   * deliberately below 1×: a 60 fps frame matters more than native pixels, and
+   * FXAA keeps the lower buffer from looking stair-stepped.
+   */
+  floorDpr?: number;
 }) {
   const gl = useThree((s) => s.gl);
   const setDpr = useThree((s) => s.setDpr);
@@ -5218,10 +5250,13 @@ function AdaptiveResolution({
     2,
     Math.max(typeof window === "undefined" ? 1 : window.devicePixelRatio || 1, minDpr),
   );
-  const dpr = useRef(max);
+  // Start at a balanced scale instead of the ceiling: the first frame should not
+  // wait for three slow samples before the governor reacts.
+  const floor = Math.min(1, Math.max(0.5, floorDpr));
+  const dpr = useRef(Math.min(max, Math.max(floor, 1.15)));
   const level = useRef<0 | 1 | 2>(2);
   const sampled = useRef(false);
-  const probe = useRef(0);
+
   const last = useRef<number | null>(null);
   const strikes = useRef(0);
   const good = useRef(0);
@@ -5347,28 +5382,6 @@ function AdaptiveResolution({
         t.ext = null;
       }
     }
-    // Dev probe: draw-call and triangle counts for the automated pass.
-    probe.current++;
-    if (probe.current % 45 === 0) {
-      const info = state.gl.info;
-      (window as unknown as { __perf?: unknown }).__perf = {
-        fps: last.current,
-        gpuMs: +gpuMs.current.toFixed(2),
-        samples: samples.current.length,
-        queries: t.pending.length + (t.live ? 1 : 0),
-        renders: t.renders,
-        calls: info.render.calls,
-        tris: info.render.triangles,
-        geos: info.memory.geometries,
-        texs: info.memory.textures,
-        dpr: +state.gl.getPixelRatio().toFixed(3),
-        buf: `${state.gl.getContext().drawingBufferWidth}x${state.gl.getContext().drawingBufferHeight}`,
-      };
-      // Temporary: the renderer itself, so the panel can measure what a change
-      // costs before it is written down as a fix.
-      (window as unknown as { __gl?: unknown }).__gl = state.gl;
-      (window as unknown as { __scene?: unknown }).__scene = state.scene;
-    }
     if (!enabled) return;
     // The Canvas `dpr` prop re-applies its own value whenever React re-renders
     // the tree, which would quietly undo the scale the governor just chose — the
@@ -5381,7 +5394,7 @@ function AdaptiveResolution({
     }
     counter.current.time += dt;
     counter.current.frames++;
-    const window_ = sampled.current ? 0.7 : 0.5;
+    const window_ = sampled.current ? 0.6 : 0.5;
     if (counter.current.time < window_) return;
     const fps = counter.current.frames / counter.current.time;
     counter.current = { time: 0, frames: 0 };
@@ -5413,7 +5426,9 @@ function AdaptiveResolution({
     // net is only drawn while this is the window being looked at, and in that
     // state the climb goes by the GPU timer alone.
     const watched = typeof document === "undefined" || document.hasFocus();
-    if (fps < 48 && watched) over = true;
+    // 56, not 48: a frame that misses the 60 Hz deadline is already visible as
+    // judder, and the old threshold let the scale sit at a 50 fps plateau.
+    if (fps < 56 && watched) over = true;
 
     // The scale is what gives way first, and it gives way in small steps: two
     // sub-millisecond queries must agree before a step is taken, so a single
@@ -5425,15 +5440,20 @@ function AdaptiveResolution({
     } else {
       strikes.current = 0;
     }
-    if (strikes.current >= 3) {
+    if (strikes.current >= 2) {
       strikes.current = 0;
-      if (dpr.current > 1.001) {
+      if (dpr.current > floor + 0.001) {
         // Halve the step as the ceiling is approached, so the scale settles
-        // instead of ringing around it.
-        dpr.current = Math.max(1, +(dpr.current - (gpuMs.current > budgetMs * 1.6 ? 0.2 : 0.1)).toFixed(2));
+        // instead of ringing around it. The floor can sit below 1× on the
+        // circuit, where a missed deadline is more noticeable than a slightly
+        // softer buffer.
+        dpr.current = Math.max(
+          floor,
+          +(dpr.current - (gpuMs.current > budgetMs * 1.6 ? 0.2 : 0.1)).toFixed(2),
+        );
         setDpr(dpr.current);
       }
-    } else if ((!watched || fps > 57) && gpuMs.current < budgetMs * 0.82) {
+    } else if ((!watched || fps > 58) && gpuMs.current < budgetMs * 0.82) {
       // Inside budget and holding the refresh: climb, slowly, one step per
       // three samples, so the picture never flickers between two scales. An
       // unwatched window climbs on the GPU timer: the rate it reports is the
@@ -5458,7 +5478,7 @@ function AdaptiveResolution({
     // The density of the scenery is the quality the player asked for, so it is
     // the last thing to be given up: only once the scale is already native and
     // the frame rate has genuinely collapsed.
-    if (watched && dpr.current <= 1.001 && level.current > 0 && fps < 45) {
+    if (watched && dpr.current <= floor + 0.001 && level.current > 0 && fps < 50) {
       level.current = (level.current - 1) as 0 | 1 | 2;
     }
     onStats?.({ level: level.current, fps, dpr: dpr.current, gpuMs: gpuMs.current });
@@ -5512,17 +5532,11 @@ export function CarStudio3D({
         dpr={[1, 2]}
         camera={{ position: [4.35, 1.85, 5.1], fov: 35 }}
         gl={renderer}
-        onCreated={({ gl, scene }) => {
+        onCreated={({ gl }) => {
           gl.shadowMap.enabled = true;
           // r186 removed PCFSoft: the plain PCF path is now a five-tap Vogel disk
-// behind hardware filtering, and shadow.radius softens it further.
-gl.shadowMap.type = THREE.PCFShadowMap;
-          // TEMPORARY — dev hook, not part of the product: hands the automated
-          // pass the live renderer and scene, so a background tab can still be
-          // photographed through the app's own render path.
-          const probe = window as unknown as { __gl?: unknown; __scene?: unknown };
-          probe.__gl = gl;
-          probe.__scene = scene;
+          // behind hardware filtering, and shadow.radius softens it further.
+          gl.shadowMap.type = THREE.PCFShadowMap;
         }}
       >
         {/* The overhead spot already casts the car's shadow; the directional
@@ -5546,7 +5560,7 @@ gl.shadowMap.type = THREE.PCFShadowMap;
         {/* The studio is the view that spends the most time on screen, so it
             carries the same governor as the circuit: the render scale climbs
             while there is budget and only drops when a frame costs too much. */}
-        <AdaptiveResolution enabled minDpr={1.5} />
+        <AdaptiveResolution enabled minDpr={1.5} floorDpr={1} />
         <FxaaPass samples={2} />
       </Canvas>
       <div className="scene-vignette" aria-hidden />
@@ -5614,13 +5628,8 @@ export function CircuitPreview({
         dpr={[1, 1.35]}
         gl={renderer}
         camera={{ position: view.pos, fov: 45 }}
-        onCreated={({ gl, scene }) => {
+        onCreated={({ gl }) => {
           gl.shadowMap.enabled = false;
-          // TEMPORARY — dev hook, not part of the product: hands the automated
-          // pass the live renderer and scene of the circuit view, so a
-          // background tab can still be audited and photographed.
-          const probe = window as unknown as { __preview?: unknown };
-          probe.__preview = { gl, scene };
         }}
       >
         <FrameCamera view={view} />
@@ -5668,7 +5677,7 @@ gl.shadowMap.type = THREE.PCFShadowMap;
           target={[0, 0.8, 0]}
           enableDamping
         />
-        <AdaptiveResolution enabled minDpr={1.35} />
+        <AdaptiveResolution enabled minDpr={1.35} floorDpr={1} />
         <StaticShadow />
         <FxaaPass samples={2} />
       </Canvas>
@@ -6087,10 +6096,10 @@ function DriverCircuit({
       // the way an onboard camera is mounted in a real car. The mount is rigid:
       // any smoothing would let the car slide away from the camera under
       // acceleration and the whole cockpit would fall apart on screen.
-      const eyeY = 1.14 + car.rideHeight * 0.05;
+      const eyeY = 1.06 + car.rideHeight * 0.05;
       const eyeZ = 0.1 + 0.22;
       camera.position.set(s.x + sinY * eyeZ, eyeY, s.z + cosY * eyeZ);
-      lookSmooth.set(s.x + sinY * 20, 1.02 - speedK * 0.16, s.z + cosY * 20);
+      lookSmooth.set(s.x + sinY * 20, 0.98 - speedK * 0.16, s.z + cosY * 20);
       camera.lookAt(lookSmooth);
     } else {
       // The boom shortens and drops as the car gets quick: the road rushes at
@@ -6776,15 +6785,6 @@ export function Driving3D({
     return { state, slot: playerSlot(track, RIVAL_COUNT) };
   }, [racing, car, track, raceLaps, raceLevel, reset]);
   const raceState = event?.state ?? null;
-  // Temporary debugging hook: lets the panel read the field's live numbers.
-  useEffect(() => {
-    if (!raceState) return;
-    const w = window as unknown as { __race?: RaceState & { track?: ClubCircuit } };
-    w.__race = Object.assign(raceState, { track });
-    return () => {
-      delete w.__race;
-    };
-  }, [raceState, track]);
   const [perf, setPerf] = useState<Perf>({
     level: 2,
     fps: 60,
@@ -6930,19 +6930,19 @@ export function Driving3D({
         dpr={perf.dpr}
         gl={renderer}
         camera={{ position: [0, 3, -7], fov: 55 }}
-        onCreated={({ gl, scene }) => {
+        onCreated={({ gl }) => {
           gl.shadowMap.enabled = true;
           // r186 removed PCFSoft: the plain PCF path is now a five-tap Vogel disk
           // behind hardware filtering, and shadow.radius softens it further.
           gl.shadowMap.type = THREE.PCFShadowMap;
-          // TEMPORARY — dev hook, not part of the product: hands the automated
-          // pass the live renderer and scene of the driving view.
-          const probe = window as unknown as { __drive?: unknown };
-          probe.__drive = { gl, scene };
         }}
       >
         <PerfContext.Provider value={perf}>
           <Lighting outdoor night={track.spec.profile.night} shadows span={12} anchor={sunAnchor} />
+          {/* The sun and the scenery never move; only the cars do. Refreshing
+              the depth map on alternate frames halves the shadow pass while
+              keeping the car's shadow within one frame of its wheels. */}
+          <ShadowThrottle />
           <TimeSlicedReflections anchor={sunAnchor} />
           <TrackEnvironment track={track} />
           <DriverCircuit
@@ -6975,8 +6975,16 @@ export function Driving3D({
               onFinish={handleFinish}
             />
           )}
-          <AdaptiveResolution enabled={!paused} onStats={handleStats} />
-          <FxaaPass />
+          <AdaptiveResolution
+            enabled={!paused}
+            onStats={handleStats}
+            minDpr={1.1}
+            floorDpr={1}
+          />
+          {/* Native-density FXAA plus in-pass unsharp masking. The extra
+              multisample target cost ~15 FPS from the driver's eye, so the
+              shader does the edge work without that resolve. */}
+          <FxaaPass samples={0} />
         </PerfContext.Provider>
       </Canvas>
       <div className="scene-vignette" aria-hidden />
@@ -7317,17 +7325,10 @@ gl.shadowMap.type = THREE.PCFShadowMap;
           </group>
         ))}
         <AdaptiveResolution enabled={running} />
-        <FxaaPass />
+        <FxaaPass samples={2} />
       </Canvas>
       <div className="scene-vignette" aria-hidden />
     </div>
   );
 }
 
-// TEMPORARY — measurement hook, not part of the product. Exposes the body mould
-// and the hull loft so the panel can render the shell offscreen while the tab
-// sits in the background, where requestAnimationFrame does not run. Remove
-// before shipping.
-if (typeof window !== "undefined") {
-  (window as unknown as { __hull?: unknown }).__hull = { mould, loftHull };
-}

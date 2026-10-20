@@ -651,24 +651,56 @@ function CatchFence({ track, level }: { track: ClubCircuit; level: number }) {
   const model = useMemo(() => {
     const step = level >= 2 ? 5 : level === 1 ? 9 : 18;
     const dist = track.halfWidth + 4.6;
+    // A fence is a chain of straight panels too. Long chords used to cut across
+    // the inside of tight corners and look like bent wires (and, at L0, reached
+    // the asphalt). Split every coarse span until its chord stays outside the
+    // barrier band on both sides.
+    const clear = track.halfWidth + 2.4;
     const panels: ChunkItem[] = [];
     const postIndex = new Set<number>();
-    // Each panel spans from one station to the next and is centred on that
-    // chord. Centring it on a single station (the old behaviour) left a
-    // half-panel hole between every pair on the longer circuits.
-    for (let i = 0; i < 600; i += step) {
-      const j = (i + step) % 600;
-      const a = track.points[i]!;
-      const ar = track.rights[i]!;
-      const b = track.points[j]!;
-      const br = track.rights[j]!;
-      postIndex.add(i);
-      postIndex.add(j);
+    const sample = (i: number) => ({
+      p: track.points[i % 600]!,
+      r: track.rights[i % 600]!,
+    });
+    const span = (a: number, b: number, depth: number) => {
+      const pa = sample(a);
+      const pb = sample(b);
+      let needsSplit = false;
+      // Check both offset curves. The chord sample step is bounded so a coarse
+      // level still catches a tight apex without touching every station.
+      const checks = Math.max(3, Math.min(18, Math.ceil((b - a) / 2)));
       for (const sign of [1, -1]) {
-        const ax = a.x + ar.x * dist * sign;
-        const az = a.z + ar.z * dist * sign;
-        const bx = b.x + br.x * dist * sign;
-        const bz = b.z + br.z * dist * sign;
+        const ax = pa.p.x + pa.r.x * dist * sign;
+        const az = pa.p.z + pa.r.z * dist * sign;
+        const bx = pb.p.x + pb.r.x * dist * sign;
+        const bz = pb.p.z + pb.r.z * dist * sign;
+        for (let k = 1; k < checks; k++) {
+          const t = k / checks;
+          const p = sample(a + Math.round((b - a) * t)).p;
+          const cx = ax + (bx - ax) * t;
+          const cz = az + (bz - az) * t;
+          if (Math.hypot(cx - p.x, cz - p.z) < clear) {
+            needsSplit = true;
+            break;
+          }
+        }
+        if (needsSplit) break;
+      }
+      if (needsSplit && b - a > 1 && depth < 9) {
+        const mid = a + Math.floor((b - a) / 2);
+        if (mid > a && mid < b) {
+          span(a, mid, depth + 1);
+          span(mid, b, depth + 1);
+          return;
+        }
+      }
+      postIndex.add(a % 600);
+      postIndex.add(b % 600);
+      for (const sign of [1, -1]) {
+        const ax = pa.p.x + pa.r.x * dist * sign;
+        const az = pa.p.z + pa.r.z * dist * sign;
+        const bx = pb.p.x + pb.r.x * dist * sign;
+        const bz = pb.p.z + pb.r.z * dist * sign;
         const dx = bx - ax;
         const dz = bz - az;
         const len = Math.hypot(dx, dz) || 1;
@@ -678,7 +710,8 @@ function CatchFence({ track, level }: { track: ClubCircuit; level: number }) {
           s: [len + 0.16, 1, 1],
         });
       }
-    }
+    };
+    for (let i = 0; i < 600; i += step) span(i, i + step, 0);
     const posts: ChunkItem[] = [];
     for (const index of postIndex) {
       const point = track.points[index]!;

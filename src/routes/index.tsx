@@ -38,7 +38,6 @@ import {
   defaultCar,
   gearRatios,
   handling,
-  NEUTRAL_SCULPT,
   normalizeCar,
   RIVALS,
   simulate,
@@ -46,7 +45,6 @@ import {
   type CarConfig,
   type Category,
   type Result,
-  type Sculpt,
 } from "@/lib/car";
 
 export const Route = createFileRoute("/")({
@@ -118,7 +116,7 @@ const LIMITS: Record<
 const GUIDES = [
   [
     "Proyecto",
-    "La categoría define el rango de piezas homologadas y el punto de partida del proyecto. Podés elegir una carrocería base en la estación 8 o crear tu propia silueta con los diales de moldeado. Hay tres bases disponibles: Cupé V10, GT V8 y Turismo GT. Elegí según el tipo de circuito y tu estilo de manejo.",
+    "La categoría define el rango de piezas homologadas y el punto de partida del proyecto. En la estación 8 elegís una de las seis carrocerías base: Cupé V10, GT V8, Turismo GT, Scafati GT, LMP1 Híbrido o Racer GT. La silueta ya está definida por el modelo; después ajustás peso, aerodinámica y pintura según el tipo de circuito y tu estilo de manejo.",
   ],
   [
     "Motor",
@@ -205,9 +203,15 @@ const CIRCUITS = [
 ] as const;
 
 function blankCar() {
+  const firstBody = BODY_OPTIONS[0];
   return {
     ...defaultCar("deportivo"),
     name: "Proyecto 001",
+    // The workshop starts on a complete, colourful shell instead of a white
+    // clay model; every base has its own two-tone livery.
+    bodyId: firstBody?.id ?? "coupe-v10",
+    color: firstBody?.color ?? "#7fb2d9",
+    accent: firstBody?.accent ?? "#f26b21",
     spoiler: false,
     stripes: false,
     rollCage: false,
@@ -315,6 +319,17 @@ function GarageGame() {
   const stationNumber = station + 1;
   const set = <K extends keyof CarConfig>(key: K, value: CarConfig[K]) =>
     setCar((current) => ({ ...current, [key]: value }));
+  // A shell brings its signature two-tone palette with it, so switching bodies
+  // never drops the player back onto a white clay model.
+  const chooseBody = (id: string) => {
+    const option = bodyById(id);
+    setCar((current) => ({
+      ...current,
+      bodyId: id,
+      color: option?.color ?? current.color,
+      accent: option?.accent ?? current.accent,
+    }));
+  };
   const chooseCategory = (category: Category) => {
     const l = LIMITS[category];
     const fallbackLayout = l.layouts[0];
@@ -560,11 +575,12 @@ function GarageGame() {
                     </div>
                   </PanelBoundary>
                 )}
-                <div className="grid shrink-0 grid-cols-4 border-t border-white/10 bg-card">
+                <div className="grid shrink-0 grid-cols-5 border-t border-white/10 bg-card">
                   <Metric label="Potencia" value={installed[1] ? stat.hp : "—"} unit="CV" />
                   <Metric label="Torque" value={installed[1] ? stat.torqueNm : "—"} unit="Nm" />
                   <Metric label="Peso" value={stat.mass} unit="kg" />
                   <Metric label="Relación" value={installed[1] ? stat.hpPerTon : "—"} unit="CV/t" />
+                  <Metric label="Punta" value={body?.topSpeed ?? "—"} unit="km/h" />
                 </div>
               </div>
               <Guide
@@ -602,6 +618,7 @@ function GarageGame() {
                     car={car}
                     set={set}
                     chooseCategory={chooseCategory}
+                    chooseBody={chooseBody}
                   />
                 </PanelBoundary>
               </div>
@@ -701,18 +718,17 @@ function StationControls({
   car,
   set,
   chooseCategory,
+  chooseBody,
 }: {
   station: number;
   car: CarConfig;
   set: Setter;
   chooseCategory: (c: Category) => void;
+  chooseBody: (id: string) => void;
 }) {
   // Belt and braces: a stored category the limits table does not know would
   // otherwise take this whole panel down before it can render a single control.
   const l = LIMITS[car.category] ?? LIMITS.deportivo;
-  const sculpt: Sculpt = car.sculpt ?? NEUTRAL_SCULPT;
-  const mould = (key: keyof Sculpt, value: number) =>
-    set("sculpt", { ...sculpt, [key]: value });
   if (station === 0)
     return (
       <>
@@ -740,7 +756,8 @@ function StationControls({
           </p>
           <p className="mt-1 font-mono text-[9px] leading-relaxed text-muted-foreground">
             Diseñás cada sistema del auto: motor, chasis, aerodinámica y carrocería. En la estación
-            de carrocería podés elegir una base o moldear tu propia silueta.
+            de carrocería elegís una de las seis bases importadas; la silueta ya está definida por
+            el modelo.
           </p>
         </div>
       </>
@@ -979,137 +996,12 @@ function StationControls({
   if (station === 7)
     return (
       <>
-        <BodyBasePicker value={car.bodyId} onChange={(id) => set("bodyId", id)} />
-        {/* No architecture presets any more: the car is moulded. */}
-        <ControlTitle>{car.bodyId ? "Ajustes del molde" : "Moldear la carrocería"}</ControlTitle>
-        <div className="rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-1.5">
-          <p className="font-mono text-[9px] leading-relaxed text-muted-foreground uppercase">
-            {car.bodyId
-              ? "Los diales no cambian la silueta del modelo: ajustan peso y aerodinámica"
-              : "Tu propia silueta · la clase solo fija el punto de partida"}
+        <BodyBasePicker value={car.bodyId} onChange={chooseBody} />
+        <div className="rounded-lg border border-primary/25 bg-primary/5 px-2.5 py-2">
+          <p className="font-mono text-[9px] leading-relaxed text-muted-foreground">
+            La silueta, el peso y la aerodinámica parten de la carrocería elegida. Podés ajustar la
+            carga aerodinámica y la pintura sin tocar la geometría del modelo.
           </p>
-        </div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-          <Range
-            dense
-            label="Largo"
-            value={sculpt.length}
-            min={0}
-            max={1}
-            step={0.05}
-            format={(v) => (v < 0.34 ? "Corto" : v < 0.67 ? "Medio" : "Largo")}
-            onChange={(v) => mould("length", v)}
-          />
-          <Range
-            dense
-            label="Ancho"
-            value={sculpt.width}
-            min={0}
-            max={1}
-            step={0.05}
-            format={(v) => (v < 0.34 ? "Angosto" : v < 0.67 ? "Medio" : "Ancho")}
-            onChange={(v) => mould("width", v)}
-          />
-          <Range
-            dense
-            label="Altura"
-            value={sculpt.height}
-            min={0}
-            max={1}
-            step={0.05}
-            format={(v) => (v < 0.34 ? "Rasante" : v < 0.67 ? "Media" : "Alta")}
-            onChange={(v) => mould("height", v)}
-          />
-          <Range
-            dense
-            label="Techo"
-            value={car.roof}
-            min={0}
-            max={1}
-            step={0.05}
-            format={(v) => (v < 0.33 ? "Bajo" : v < 0.66 ? "Medio" : "Alto")}
-            onChange={(v) => set("roof", v)}
-          />
-          <Range
-            dense
-            label="Morro"
-            value={sculpt.nose}
-            min={0}
-            max={1}
-            step={0.05}
-            format={(v) => (v < 0.34 ? "Bajo" : v < 0.67 ? "Medio" : "Alto")}
-            onChange={(v) => mould("nose", v)}
-          />
-          <Range
-            dense
-            label="Capó"
-            value={sculpt.hood}
-            min={0}
-            max={1}
-            step={0.05}
-            format={(v) => (v < 0.34 ? "Musculoso" : v < 0.67 ? "Neutro" : "Plano")}
-            onChange={(v) => mould("hood", v)}
-          />
-          <Range
-            dense
-            label="Parabrisas"
-            value={sculpt.rake}
-            min={0}
-            max={1}
-            step={0.05}
-            format={(v) => (v < 0.34 ? "Parado" : v < 0.67 ? "Medio" : "Tumbado")}
-            onChange={(v) => mould("rake", v)}
-          />
-          <Range
-            dense
-            label="Cabina"
-            value={sculpt.cabin}
-            min={0}
-            max={1}
-            step={0.05}
-            format={(v) => (v < 0.34 ? "Adelante" : v < 0.67 ? "Central" : "Atrás")}
-            onChange={(v) => mould("cabin", v)}
-          />
-          <Range
-            dense
-            label="Cola"
-            value={sculpt.tail}
-            min={0}
-            max={1}
-            step={0.05}
-            format={(v) => (v < 0.34 ? "Baja" : v < 0.67 ? "Media" : "Alta")}
-            onChange={(v) => mould("tail", v)}
-          />
-          <Range
-            dense
-            label="Curvas"
-            value={sculpt.curves}
-            min={0}
-            max={1}
-            step={0.05}
-            format={(v) => (v < 0.34 ? "Recta" : v < 0.67 ? "Media" : "Redonda")}
-            onChange={(v) => mould("curves", v)}
-          />
-          <Range
-            dense
-            label="Alerón"
-            value={sculpt.wing}
-            min={0}
-            max={1}
-            step={0.05}
-            format={(v) => (v < 0.2 ? "Nulo" : v < 0.55 ? "Medio" : v < 0.8 ? "Grande" : "Carrera")}
-            onChange={(v) => mould("wing", v)}
-          />
-          <Range
-            dense
-            label="Pasos"
-            value={sculpt.arches}
-            min={0}
-            max={1}
-            step={0.05}
-            format={(v) => (v < 0.34 ? "Integrados" : v < 0.67 ? "Marcados" : "Abultados")}
-            onChange={(v) => mould("arches", v)}
-          />
         </div>
         <Range
           dense
@@ -1121,20 +1013,7 @@ function StationControls({
           format={(v) => `${Math.round(v * 100)}%`}
           onChange={(v) => set("downforce", v)}
         />
-        {!car.bodyId && (
-          <div className="grid grid-cols-2 gap-2">
-            <Toggle
-              label="Alerón activo"
-              active={car.spoiler}
-              onClick={() => set("spoiler", !car.spoiler)}
-            />
-            <Toggle
-              label="Librea"
-              active={car.stripes}
-              onClick={() => set("stripes", !car.stripes)}
-            />
-          </div>
-        )}
+
         <div className="grid grid-cols-2 gap-3">
           <ColorField label="Pintura" value={car.color} onChange={(v) => set("color", v)} />
           <ColorField label="Detalles" value={car.accent} onChange={(v) => set("accent", v)} />
@@ -1181,16 +1060,15 @@ function StationControls({
 }
 
 /**
- * Bodywork picker: the sculpted shell or one of the supplied base models. The
- * credits keep the CC attribution visible without turning the card into a
- * manufacturer badge.
+ * Bodywork picker: one of the supplied base models. The credits keep the CC
+ * attribution visible without turning the card into a manufacturer badge.
  */
 function BodyBasePicker({
   value,
   onChange,
 }: {
   value: string | undefined;
-  onChange: (id: string | undefined) => void;
+  onChange: (id: string) => void;
 }) {
   const selected = bodyById(value);
   const card = (active: boolean) =>
@@ -1203,21 +1081,6 @@ function BodyBasePicker({
     <div className="space-y-1.5">
       <ControlTitle>Carrocería base</ControlTitle>
       <div className="grid gap-1.5">
-        <button
-          type="button"
-          onClick={() => onChange(undefined)}
-          aria-pressed={!value}
-          className={card(!value)}
-        >
-          <span className="flex items-center gap-1.5">
-            <Car className="h-3.5 w-3.5 text-primary" />
-            <span className="font-display text-[11px] tracking-wide uppercase">Diseño propio</span>
-            {!value && <Check className="ml-auto h-3 w-3 text-primary" />}
-          </span>
-          <span className="font-mono text-[8px] text-muted-foreground">
-            Silueta moldeable con los diales
-          </span>
-        </button>
         {BODY_OPTIONS.map((body) => {
           const active = body.id === value;
           return (
@@ -1233,14 +1096,17 @@ function BodyBasePicker({
                 <span className="font-display text-[11px] tracking-wide uppercase">{body.name}</span>
                 {active && <Check className="ml-auto h-3 w-3 text-primary" />}
               </span>
-              <span className="font-mono text-[8px] text-muted-foreground">{body.tagline}</span>
+              <span className="flex items-center justify-between gap-2 font-mono text-[8px] text-muted-foreground">
+                <span>{body.tagline}</span>
+                <span className="text-foreground/80">{body.topSpeed} km/h</span>
+              </span>
             </button>
           );
         })}
       </div>
       {selected ? (
         <p className="font-mono text-[8px] leading-relaxed text-muted-foreground">
-          {selected.description}{" "}
+          {selected.description} Velocidad punta real: {selected.topSpeed} km/h.{" "}
           <a
             href={selected.credit.source}
             target="_blank"
@@ -1252,7 +1118,7 @@ function BodyBasePicker({
         </p>
       ) : (
         <p className="font-mono text-[8px] leading-relaxed text-muted-foreground">
-          Elegí una base de las disponibles o creá tu propia silueta.
+          Elegí una de las seis carrocerías base.
         </p>
       )}
     </div>
